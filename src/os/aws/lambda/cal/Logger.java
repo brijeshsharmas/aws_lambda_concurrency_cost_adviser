@@ -12,6 +12,7 @@ public class Logger {
 	private boolean writeToFile = false;
 	private static Logger logger = null;
 	
+	/*******************************************************SINGLETOM IMPLEMENTATION**********************************************************************/
 	protected Logger() {}
 	
 	public static Logger getLogger() {
@@ -31,6 +32,21 @@ public class Logger {
 	
 	public void print(String msg) {
 		System.out.println(msg);
+	}
+	public void printStarLine() {
+		System.out.println("**************************************************************************************************************");
+	}
+	public void printStarLine(String msg) {
+		System.out.println("********************************" + msg + "***************************************");
+	}
+	public void printUnderscoreLine() {
+		System.out.println("______________________________________________________________________________________________________________");
+	}
+	public void printMinusLine() {
+		System.out.println("--------------------------------------------------------------------------------------------------------------");
+	}
+	public void printBlankLine() {
+		System.out.println("");
 	}
 
 }
