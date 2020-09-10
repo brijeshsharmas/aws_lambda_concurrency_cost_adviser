@@ -3,21 +3,34 @@ package os.aws.lambda.cal;
 
 import os.aws.lambda.cal.config.Config;
 import os.aws.lambda.cal.modal.JsonPayload;
+import os.aws.lambda.cal.service.AWSServiceFactory;
+import os.aws.lambda.cal.util.Renderer;
+import os.aws.lambda.cal.util.Util;
 
-import static os.aws.lambda.cal.config.ConfigConstants.KEY_HELP;
-import static os.aws.lambda.cal.config.ConfigConstants.KEY_HELP_JSON;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_MIN_MAX_MEMORY;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_NUM_TOTAL_INVOCATION;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_INVOCATION_TYPE;
+
+import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP;
+import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP_JSON;
+import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_FILE;
+
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_WEIGHT;
-import static os.aws.lambda.cal.config.ConfigConstants.KEY_HELP_VALIDATE;
+import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP_VALIDATE;
+import static os.aws.lambda.cal.config.ConfigConstants.CONFIRMATION_CONTINUUE_MSG;
+import static os.aws.lambda.cal.config.ConfigConstants.CONFIRMATION_SAVE_CONFIGURATION_MSG;
 
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.Reader;
+import static os.aws.lambda.cal.util.Renderer.INT_STAR_LINE_WITH_MESSAGE;
+import static os.aws.lambda.cal.util.Renderer.INT_UNDERSCORE_LINE;
+import static os.aws.lambda.cal.util.Renderer.INT_BLANK_LINE;
+import static os.aws.lambda.cal.util.Renderer.INT_DO_NOTHING;
+import static os.aws.lambda.cal.util.Renderer.INT_MINUS_LINE;
+
 import java.util.Date;
 
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
+import com.amazonaws.services.lambda.AWSLambda;
+import com.amazonaws.services.lambda.model.ListFunctionsResult;
+
 
 public class AwsLdConCostCal {
 	
@@ -25,64 +38,118 @@ public class AwsLdConCostCal {
 	private static String name = "Lambda Concurrency & Cost Optimizer";
 	
 	private static Logger logger = Logger.getLogger();
+	private static Renderer renderer = Renderer.getRenderer();
+	private static Config config = Config.getConfig();
+	private AWSServiceFactory factor = AWSServiceFactory.getFactory();
 	
-	public void kickOff() {
-		
-		logger.printUnderscoreLine();
-		logger.printBlankLine();
-		logger.printStarLine("Begin Capturing Configuration");
-		
-		//Capture and Validate Input
-		Config config = Config.getConfig();
-		boolean captureConfigPassed = config.captureAndValidateInput();
-		logger.printUnderscoreLine();;
-		
-		logger.printBlankLine();
-		logger.printStarLine("Configuration Provided By User Are Below");
-		config.printAllConfiguration();
-		logger.printUnderscoreLine();;
-		
-		if (!captureConfigPassed) return;
-		
-		logger.printBlankLine();
-		if (config.confirmYesNo()) execute(config);
-		
-	}
-	
-	private void execute(Config config ) {
-		logger.printUnderscoreLine();
-		logger.printBlankLine();
-		logger.printStarLine("Begin Executing Configuration");
-		logger.print("Inside Execute");
-		logger.printUnderscoreLine();
-	}
 
+	/***********************************************MAIN-METHOD********************************************************************************/
 	public static void main(String[] args) { 
-		if(args.length == 0) { start(); return;}
+		if (args.length > 0 && ARGUMENT_HELP.equalsIgnoreCase(args[0]))  {executeHelpSection(args); return;} 
+		start(args);
+	}
+	
+	/***********************************************PREP-AND-VALIDATION********************************************************************************/
+	public void kickOff(String[] args) {
 		
-		if (KEY_HELP.equalsIgnoreCase(args[0])) executeHelpSection(args);
+		int[] renderArgs = {INT_UNDERSCORE_LINE, INT_BLANK_LINE, INT_STAR_LINE_WITH_MESSAGE, INT_DO_NOTHING, INT_DO_NOTHING, INT_DO_NOTHING};
+		args = Util.toLowerCase(args);
+		
+		switch(args.length) {
+		case 0: 
+			if(!captureConfiguration(args, renderArgs)) return;
+			break;
+		default:
+			switch(args[0]) {
+			case ARGUMENT_FILE:
+				if (!loadConfiguration(args, renderArgs)) return;
+			}
+		}
+		
+		execute(renderArgs);	
+	}
+	private boolean loadConfiguration(String [] args, int[] renderArgs) {
+		if(args.length < 2) {
+			logger.print("Missing Config File/Path Argument. Plese Use " + ARGUMENT_FILE + " <<config.json>>");
+			return false;
+		}
+		renderer.printLine(renderArgs, "Loading Configuration");
+		boolean loadConfigStatus =  config.loadConfiguration(args[1]);
+		renderArgs[2] = INT_DO_NOTHING;
+		renderer.printLine(renderArgs);
+		return loadConfigStatus;
+		
+	}
+	private boolean captureConfiguration(String [] args, int[] renderArgs) { 
+		renderer.printLine(renderArgs, "Begin Capturing Configuration");
+		//Capture and Validate Input
+		boolean captureConfigPassed = config.captureAndValidateInput();
+		
+		renderer.printLine(renderArgs, "Configuration Provided By User Are Below");
+		config.printAllConfiguration();
+		
+		renderArgs[2] = INT_DO_NOTHING;
+		renderer.printLine(renderArgs);
+		
+		if (config.confirmYesNo(CONFIRMATION_SAVE_CONFIGURATION_MSG)) config.saveConfiguration();
+		renderer.printLine(renderArgs);
+		
+		return captureConfigPassed;
+	}
+	private void execute(int[] renderArgs) {
+		renderArgs[0]=INT_DO_NOTHING; renderArgs[1]=INT_DO_NOTHING; renderArgs[2] = INT_STAR_LINE_WITH_MESSAGE;
+		renderer.printLine(renderArgs, "Begin Executing Configuration");
+		
+		summarizeExecution();
+		renderArgs[2] = INT_MINUS_LINE;
+		renderer.printLine(renderArgs, "");
+		
+		if (!config.confirmYesNo(CONFIRMATION_CONTINUUE_MSG)) return;
+		
+		executeScenarios(renderArgs);
+		
 	}
 	
-	private static void start() {
+	private static void start(String []args) {
 		startupMessage();
-		new AwsLdConCostCal().kickOff(); 
+		new AwsLdConCostCal().kickOff(args); 
 	}
 	
+	/************************************************EXECUTION SECTION*******************************************************************************/
+	private boolean executeScenarios(int[] renderArgs) {
+		renderArgs[0]=INT_DO_NOTHING; renderArgs[1]=INT_DO_NOTHING; renderArgs[2] = INT_DO_NOTHING;
+		for(int i=config.getMinMemoryNumber(); i<=config.getMaxMemoryNumber(); i=i+config.getIncrementMemoryNumber()) {
+			renderArgs[0]=INT_UNDERSCORE_LINE; renderArgs[1]=INT_STAR_LINE_WITH_MESSAGE; 
+			renderer.printLine(renderArgs, "Begin Execution For Memory [" + i + "]");
+			
+			AWSLambda client = factor.getAWSLambdaClient();
+			ListFunctionsResult functionResult = client.listFunctions();
+		
+
+                System.out.println("The function name is "+functionResult);
+			
+			renderArgs[0]=INT_STAR_LINE_WITH_MESSAGE; renderArgs[1]=INT_UNDERSCORE_LINE;
+			renderer.printLine(renderArgs, "Ended Execution For Memory [" + i + "]");
+		}
+		
+		
+		return true;
+	}
 	/************************************************HELP SECTION*******************************************************************************/
 	private static void executeHelpSection(String args[]) {
 		if(args.length == 1) printHelpSection();
-		else if (args.length > 1 && args[1].equalsIgnoreCase(KEY_HELP_JSON)) executeJsonHelpSection(args);
+		else if (args.length > 1 && args[1].equalsIgnoreCase(ARGUMENT_HELP_JSON)) executeJsonHelpSection(args);
 	}
 	private static void executeJsonHelpSection(String args[]) {
 		if(args.length == 2) printJsonHelpSection();
-		else if (args.length > 2 && args[2].equalsIgnoreCase(KEY_HELP_VALIDATE)) executeJsonValidateSection(args);
+		else if (args.length > 2 && args[2].equalsIgnoreCase(ARGUMENT_HELP_VALIDATE)) executeJsonValidateSection(args);
 	}
 	private static void executeJsonValidateSection(String args[]) {
 		if(args.length == 3) {
-			System.out.println("Missing json-file Path In Argument.\nValid Syntax Is: " + KEY_HELP + " " + KEY_HELP_JSON + " " + KEY_HELP_VALIDATE + " <<file_path>>");
+			System.out.println("Missing json-file Path In Argument.\nValid Syntax Is: " + ARGUMENT_HELP + " " + ARGUMENT_HELP_JSON + " " + ARGUMENT_HELP_VALIDATE + " <<file_path>>");
 			return;
 		}
-		JsonPayload jsonPayLoad = Config.getConfig().loadJson(args[3]);
+		JsonPayload jsonPayLoad = config.loadJson(args[3]);
 		if(jsonPayLoad == null) return;
 		if (jsonPayLoad.validateJson()) System.out.println("Json Validated Succesfully");
 		else System.out.println("Json Validation Failed. Error [" + jsonPayLoad.validationMessage() + "]");
@@ -112,7 +179,18 @@ public class AwsLdConCostCal {
 /*******************************************************Helper Methods**********************************************************************************/	
 	private static void startupMessage() {
 		logger.print("Started [" + name + "] Build Version At [" + buildVersion + "] At [" + new Date(System.currentTimeMillis())  + "]");
-		logger.print("For Help, Use " + KEY_HELP);
+		logger.print("For Help, Use " + ARGUMENT_HELP + ", Or For More Details, Visit https://tools.brijeshsharma.com");
+	}
+	private void summarizeExecution() {
+		//Summarizing Execution Cycles
+		logger.print("Planned Execution Summarized Below");
+		logger.print("\tAs Per Config [Key=" +  KEY_MIN_MAX_MEMORY + ", Value=" + config.getStringConfigValue(KEY_MIN_MAX_MEMORY) + "], Calculator Will Make Total Of [" 
+				+ config.getNumberOfMemoryAdjustmentCycles() + "] Memory Adjustments.");
+		logger.print("\tFor Each Memory Adjustment Execution Cycle, Calculator Will Run [" + config.getNumberOfInvocationPerCycle() + "] Invocations.");
+		if (config.getNumberOfPayloads() == 0) logger.print("\tNo Json Payload Will Be Used For Each Invocation");
+		else logger.print("\tTotal Invocation [" + config.getNumberOfInvocationPerCycle() + "] Will Be Spread Across [" + 
+				config.getNumberOfPayloads() + "] Json Payloads As " +  config.getPayloadSpreadString()  + " Respectively");
+		logger.print("\tEach Invocation Type Will Be [" + (config.isInvocationTypeSynchronous() ? "Synchronous" : "Asynchronous") + "]");
 	}
 	
 }

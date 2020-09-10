@@ -23,7 +23,10 @@ public class JsonPayload {
 	
 	
 	/****************************************BUILD METHODS*****************************************************/
-	public JsonPayload(JSONArray jsonArray) { this.jsonArray = jsonArray;}
+	protected JsonPayload(JSONArray jsonArray) { 
+		this.jsonArray = jsonArray;
+		if(!validateJson()) throw new RuntimeException("Not A Valid Json Payload. Error [" + validationMessage + "]");
+	}
 	public static JsonPayload buildJsonPayload(JSONArray jsonArray) { return new JsonPayload(jsonArray); }
 	
 	/****************************************BUILD METHODS*****************************************************/
@@ -45,11 +48,50 @@ public class JsonPayload {
 	
 	/****************************************GETTTER-SETTER*****************************************************/
 	public String validationMessage() { return validationMessage;}
-	public void add(JSONObject body, JSONObject weight) {
+	public String getPayloadSpreadString(int invocationCount) {
+		String returnMsg = "[";
+		int []arr = getPayloadSpread(invocationCount);
+		
+		for(int i=0; i<arr.length; i++)
+			returnMsg += " " +  arr[i];
+		
+		return returnMsg+"]";
+	}
+	public int[] getPayloadSpread(int invocationCount) {
+		
+		//Convert to float
+		float totalWeight = getTotalWeight();
+		float invocation = invocationCount;
+		
+		int totalSpread = 0;
+		int [] arr = new int[getNumberOfPayloads()];
+		
+		for(int i=0; i<getNumberOfPayloads(); i++) {
+			//System.out.println("Next Weight [" + getWeight(i) + ", Total Weight " + getTotalWeight());
+			float nextWeight = getWeight(i);
+			int nextSpread = (int) (nextWeight/totalWeight*invocation);
+			totalSpread += nextSpread;
+			if(totalSpread > invocationCount) nextSpread = nextSpread - (totalSpread - invocationCount);
+			arr[i] = nextSpread;
+		}
+		if (totalSpread < invocationCount) arr[arr.length-1] = arr[arr.length-1] + (invocationCount - totalSpread);
+		
+		return arr;
 		
 	}
-	public JSONObject getBody(int index) { return null;}
-	public int getWeight(int index) { return 0;}
+	public int getNumberOfPayloads( ) { return jsonArray.size(); }
+	public JSONObject getBody(int index) { return (JSONObject) ((JSONObject)jsonArray.get(index)).get(KEY_BODY);}
+	public int getWeight(int index) { 
+		JSONObject obj = (JSONObject)jsonArray.get(index);
+		if (obj == null) return 1;
+		return obj.get(KEY_WEIGHT) == null ? 1 : Integer.parseInt(obj.get(KEY_WEIGHT).toString());
+	}
+	public int getTotalWeight() { 
+		int totalWeight = 0;
+		for(int i=0; i <getNumberOfPayloads(); i++)
+			totalWeight += getWeight(i);
+		return totalWeight == 0 ? 1: totalWeight;
+	}
 	
 	public String toString() {
 		return jsonArray.toJSONString();
