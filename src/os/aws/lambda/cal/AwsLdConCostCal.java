@@ -29,8 +29,12 @@ import static os.aws.lambda.cal.util.Renderer.INT_FORWARD_LINE;
 
 import java.util.Date;
 
+import com.amazonaws.metrics.RequestMetricCollector;
 import com.amazonaws.services.lambda.AWSLambda;
 import com.amazonaws.services.lambda.model.AWSLambdaException;
+import com.amazonaws.services.lambda.model.InvocationType;
+import com.amazonaws.services.lambda.model.InvokeRequest;
+import com.amazonaws.services.lambda.model.InvokeResult;
 import com.amazonaws.services.lambda.model.ListFunctionsResult;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationResult;
@@ -44,7 +48,8 @@ public class AwsLdConCostCal {
 	private static Logger logger = Logger.getLogger();
 	private static Renderer renderer = Renderer.getRenderer();
 	private static Config config = Config.getConfig();
-	private AWSServiceFactory factor = AWSServiceFactory.getFactory();
+	private AWSServiceFactory factory = AWSServiceFactory.getFactory();
+	private volatile float passedInvocation=0.0f, failedInvocation=0.0f, errorThreshold=0.02f;
 	
 
 	/***********************************************MAIN-METHOD********************************************************************************/
@@ -127,7 +132,7 @@ public class AwsLdConCostCal {
 			renderer.printLine(renderArgs, "Begin Execution For Memory [" + i + "]");
 			
 			if(doAbort_IfUpdateMemoryAdjustment_Fail(i, renderArgs)) return false;
-			if(doAbort_IfLambdaInvocation_Fail()) return false;
+			if(doAbort_IfLambdaInvocation_Fail(renderArgs)) return false;
 			if(doAbort_IfLambdaMetricCollection_Fail()) return false;
 			
 			renderArgs[0]=INT_STAR_LINE_WITH_MESSAGE; renderArgs[1]=INT_UNDERSCORE_LINE;
@@ -139,13 +144,12 @@ public class AwsLdConCostCal {
 	}
 	/**To Execute This Operation, IAM User Must Have lambda:UpdateFunctionConfiguraton permission**/
 	private boolean doAbort_IfUpdateMemoryAdjustment_Fail(int memorySize, int[] renderArgs) {
-		AWSLambda lambdaClient = factor.getAWSLambdaClient();
+		AWSLambda lambdaClient = factory.getAWSLambdaClient();
 		UpdateFunctionConfigurationRequest updateConfigRequest = new UpdateFunctionConfigurationRequest()
 				.withFunctionName(config.getLambdaFunctionARN())
 				.withMemorySize(memorySize);
-		UpdateFunctionConfigurationResult updateConfigResult = null;
 		
-		try { updateConfigResult = lambdaClient.updateFunctionConfiguration(updateConfigRequest);
+		try { lambdaClient.updateFunctionConfiguration(updateConfigRequest);
 		}catch(AWSLambdaException exception ) {
 			printAbortMessage(renderArgs, "Aborting Operation-->AWSLambdaException-->Execute Update Function Configuration - Memory Adjustment [" + memorySize + "]. Error [" + exception.getMessage() + "]");
 			return true;
@@ -153,17 +157,45 @@ public class AwsLdConCostCal {
 			printAbortMessage(renderArgs, "Aborting Operation-->GeneralException-->Execute Update Function Configuration - Memory Adjustment [" + memorySize + "]. Error [" + exception.getMessage() + "]");
 			return true;
 		}
-		logger.print("Lambda Function Succesfully Updated With Memory [" + memorySize + "]");
+		logger.print("Lambda Function Configuration Succesfully Updated With Memory [" + memorySize + "]");
 		
 		return false;
 	}
-	private boolean doAbort_IfLambdaInvocation_Fail() {
+	private boolean doAbort_IfLambdaInvocation_Fail(int [] renderArgs) {
+		InvokeRequest invokeRequest = new InvokeRequest()
+				.withFunctionName(config.getLambdaFunctionARN())
+				.withInvocationType(InvocationType.DryRun);
+		logger.print("Invoking Lambda Function With Mode [" + InvocationType.DryRun + "]");
+		if(doAbort_IfLambdaInvocation_Fail(invokeRequest, renderArgs)) return true;
+		
+		
 		
 		return false;
 	}
 	private boolean doAbort_IfLambdaMetricCollection_Fail() {
 		
 		return false;
+	}
+	private boolean doAbort_IfLambdaInvocation_Fail(InvokeRequest invokeRequest, int[] renderArgs) {
+		try {  InvokeResult invokeResult = factory.getAWSLambdaClient().invoke(invokeRequest);
+			switch (InvocationType.fromValue(invokeRequest.getInvocationType())) {
+			case DryRun:
+				return invokeResult.getStatusCode() == 204 ? false: true;
+			case Event:
+				if (invokeResult.getStatusCode() == 202) ++passedInvocation; else ++failedInvocation;
+			case RequestResponse:
+				if (invokeResult.getStatusCode() == 200) ++passedInvocation; else ++failedInvocation;
+			}	
+		}catch(AWSLambdaException exception ) {
+			printAbortMessage(renderArgs, "Aborting Operation-->AWSLambdaException-->InvokeFunction-->InvocationType [" + invokeRequest.getInvocationType() + "]. Error [" + exception.getMessage() + "]");
+			return true;
+		}catch(Exception exception) {
+			printAbortMessage(renderArgs, "Aborting Operation-->GeneralException-->InvokeFunctionInvocationType [" + invokeRequest.getInvocationType() + "]. Error [" + exception.getMessage() + "]");
+			return true;
+		}
+		return hasErrorRateBreached();
+	}
+	private boolean hasErrorRateBreached() { return failedInvocation/(passedInvocation+failedInvocation) > errorThreshold ?  true: false;
 	}
 	/************************************************HELP SECTION*******************************************************************************/
 	private static void executeHelpSection(String args[]) {
