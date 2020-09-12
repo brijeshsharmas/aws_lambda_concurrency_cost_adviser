@@ -45,6 +45,9 @@ public class Logger {
 	public void printMinusLine() {
 		System.out.println("--------------------------------------------------------------------------------------------------------------");
 	}
+	public void printForwardSlashLine() {
+		System.out.println("//////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+	}
 	public void printBlankLine() {
 		System.out.println("");
 	}

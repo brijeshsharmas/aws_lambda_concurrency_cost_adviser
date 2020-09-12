@@ -34,7 +34,7 @@ public interface ConfigConstants {
 	public static String KEY_LOG_MESSAGE = "LOG_MESSAGE";
 	public static String KEY_LAMBDA_ARN = "LAMBDA_ARN";
 	public static String KEY_MIN_MAX_MEMORY = "MIN_MAX_MEMORY";
-	public static String KEY_NUM_TOTAL_INVOCATION = "NUM_TOTAL_INVOCATION";
+	public static String KEY_NUM_INVOCATION = "NUM_INVOCATION";
 	public static String KEY_JSON_PAYLOAD = "JSON_PAYLOAD";
 	public static String KEY_INVOCATION_TYPE = "INVOCATION_TYPE";
 	public static String KEY_AWS_REGION = "AWS_REGION";
@@ -55,7 +55,7 @@ public interface ConfigConstants {
 													"2752, 2816, 2880, 2944, 3008]";
 	public static String MIN_MAX_MEMORY_MSG = "Do You Want To Provide Memory (mb) Range In The Increment Of 64mb Starting With 128 mb. Please Specify \"NO\" Without \"\" If " + 
 													"You Want To Use Default Range Of 128-1280-128 (Min=128, Max=1280 And Increment=128)";
-	public static String NUM_TOTAL_INVOCATION_MSG = "Please Provide Total Number Of Invocation (recommended to set it 100) To Your Lambda Function Across All Payloads";
+	public static String NUM_INVOCATION_MSG = "For A Single Memory Adjustmet, Please Provide Number Of Invocation (recommended to set it 25) To Your Lambda Function Across All Payloads";
 	public static String JSON_PAYLOAD_MSG = "Do You Want To Provide Lambda Json Payload (.json file) Location. Please specify \"NO\" Without \"\" If " + 
 			"You Do Not Want To Send Payload With Your Lambda Invocation";
 	
@@ -85,7 +85,7 @@ public interface ConfigConstants {
 	}
 	default List<String> getIntPropertyList () {
 		List<String> list = new ArrayList<String>();
-		list.add(KEY_NUM_TOTAL_INVOCATION);
+		list.add(KEY_NUM_INVOCATION);
 		list.add(KEY_PROXY_PORT);
 		return list;
 	}
@@ -96,7 +96,7 @@ public interface ConfigConstants {
 	}
 	default List<String> getMandatoryPropertyListForLoadingConfiguration () {
 		List<String> list = new ArrayList<String>();
-		list.add(KEY_NUM_TOTAL_INVOCATION);
+		list.add(KEY_NUM_INVOCATION);
 		list.add(KEY_LAMBDA_ARN);
 		return list;
 	}

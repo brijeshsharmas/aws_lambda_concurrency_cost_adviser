@@ -8,7 +8,7 @@ import os.aws.lambda.cal.util.Renderer;
 import os.aws.lambda.cal.util.Util;
 
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_MIN_MAX_MEMORY;
-import static os.aws.lambda.cal.config.ConfigConstants.KEY_NUM_TOTAL_INVOCATION;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_NUM_INVOCATION;
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_INVOCATION_TYPE;
 
 import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP;
@@ -25,11 +25,15 @@ import static os.aws.lambda.cal.util.Renderer.INT_UNDERSCORE_LINE;
 import static os.aws.lambda.cal.util.Renderer.INT_BLANK_LINE;
 import static os.aws.lambda.cal.util.Renderer.INT_DO_NOTHING;
 import static os.aws.lambda.cal.util.Renderer.INT_MINUS_LINE;
+import static os.aws.lambda.cal.util.Renderer.INT_FORWARD_LINE;
 
 import java.util.Date;
 
 import com.amazonaws.services.lambda.AWSLambda;
+import com.amazonaws.services.lambda.model.AWSLambdaException;
 import com.amazonaws.services.lambda.model.ListFunctionsResult;
+import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
+import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationResult;
 
 
 public class AwsLdConCostCal {
@@ -122,11 +126,9 @@ public class AwsLdConCostCal {
 			renderArgs[0]=INT_UNDERSCORE_LINE; renderArgs[1]=INT_STAR_LINE_WITH_MESSAGE; 
 			renderer.printLine(renderArgs, "Begin Execution For Memory [" + i + "]");
 			
-			AWSLambda client = factor.getAWSLambdaClient();
-			ListFunctionsResult functionResult = client.listFunctions();
-		
-
-                System.out.println("The function name is "+functionResult);
+			if(doAbort_IfUpdateMemoryAdjustment_Fail(i, renderArgs)) return false;
+			if(doAbort_IfLambdaInvocation_Fail()) return false;
+			if(doAbort_IfLambdaMetricCollection_Fail()) return false;
 			
 			renderArgs[0]=INT_STAR_LINE_WITH_MESSAGE; renderArgs[1]=INT_UNDERSCORE_LINE;
 			renderer.printLine(renderArgs, "Ended Execution For Memory [" + i + "]");
@@ -134,6 +136,34 @@ public class AwsLdConCostCal {
 		
 		
 		return true;
+	}
+	/**To Execute This Operation, IAM User Must Have lambda:UpdateFunctionConfiguraton permission**/
+	private boolean doAbort_IfUpdateMemoryAdjustment_Fail(int memorySize, int[] renderArgs) {
+		AWSLambda lambdaClient = factor.getAWSLambdaClient();
+		UpdateFunctionConfigurationRequest updateConfigRequest = new UpdateFunctionConfigurationRequest()
+				.withFunctionName(config.getLambdaFunctionARN())
+				.withMemorySize(memorySize);
+		UpdateFunctionConfigurationResult updateConfigResult = null;
+		
+		try { updateConfigResult = lambdaClient.updateFunctionConfiguration(updateConfigRequest);
+		}catch(AWSLambdaException exception ) {
+			printAbortMessage(renderArgs, "Aborting Operation-->AWSLambdaException-->Execute Update Function Configuration - Memory Adjustment [" + memorySize + "]. Error [" + exception.getMessage() + "]");
+			return true;
+		}catch(Exception exception) {
+			printAbortMessage(renderArgs, "Aborting Operation-->GeneralException-->Execute Update Function Configuration - Memory Adjustment [" + memorySize + "]. Error [" + exception.getMessage() + "]");
+			return true;
+		}
+		logger.print("Lambda Function Succesfully Updated With Memory [" + memorySize + "]");
+		
+		return false;
+	}
+	private boolean doAbort_IfLambdaInvocation_Fail() {
+		
+		return false;
+	}
+	private boolean doAbort_IfLambdaMetricCollection_Fail() {
+		
+		return false;
 	}
 	/************************************************HELP SECTION*******************************************************************************/
 	private static void executeHelpSection(String args[]) {
@@ -191,6 +221,11 @@ public class AwsLdConCostCal {
 		else logger.print("\tTotal Invocation [" + config.getNumberOfInvocationPerCycle() + "] Will Be Spread Across [" + 
 				config.getNumberOfPayloads() + "] Json Payloads As " +  config.getPayloadSpreadString()  + " Respectively");
 		logger.print("\tEach Invocation Type Will Be [" + (config.isInvocationTypeSynchronous() ? "Synchronous" : "Asynchronous") + "]");
+	}
+	private void printAbortMessage(int [] renderArgs, String msg) {
+		renderArgs[0] = INT_BLANK_LINE; renderArgs[1] = INT_FORWARD_LINE;renderArgs[2] = INT_STAR_LINE_WITH_MESSAGE;
+		renderArgs[3] = INT_FORWARD_LINE;renderArgs[4] = INT_BLANK_LINE;
+		renderer.printLine(renderArgs,msg);
 	}
 	
 }

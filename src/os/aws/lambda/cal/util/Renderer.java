@@ -17,6 +17,7 @@ public class Renderer {
 	public static final int INT_MINUS_LINE = 2;
 	public static final int INT_STAR_LINE_WITH_MESSAGE = 3;
 	public static final int INT_BLANK_LINE = 4;
+	public static final int INT_FORWARD_LINE = 5;
 	public static final int INT_DO_NOTHING = 99;
 	
 	private Logger logger = Logger.getLogger(); 
@@ -38,6 +39,9 @@ public class Renderer {
 
 	/*******************************************************RENDERED METHODS*****************************************************************/
 	public void printLine(int args[]) {  printLine(args, "");}
+	public void printAbortErrorMessage(String starMessage) {
+		
+	}
 	public void printLine(int args[], String starMessage) {
 		
 		if(args == null) return;
@@ -57,6 +61,9 @@ public class Renderer {
 					break;
 				case INT_BLANK_LINE:
 					logger.printBlankLine();
+					break;
+				case INT_FORWARD_LINE:
+					logger.printForwardSlashLine();
 					break;
 				case INT_DO_NOTHING:
 					break;

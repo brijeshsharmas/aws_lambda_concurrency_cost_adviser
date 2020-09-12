@@ -56,7 +56,7 @@ public class Config implements ConfigConstants {
 	public int getMinMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 0, MIN_MAX_DELIMETER);}
 	public int getMaxMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 1, MIN_MAX_DELIMETER);}
 	public int getIncrementMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 2, MIN_MAX_DELIMETER);}
-	public int getNumberOfInvocationPerCycle() { return mapIntConfig.get(KEY_NUM_TOTAL_INVOCATION);}
+	public int getNumberOfInvocationPerCycle() { return mapIntConfig.get(KEY_NUM_INVOCATION);}
 	public int getNumberOfMemoryAdjustmentCycles() { return 1 + (getMaxMemoryNumber()-getMinMemoryNumber()) / getIncrementMemoryNumber();}
 	public int getNumberOfPayloads() { return jsonPayLoad == null ? 0: jsonPayLoad.getNumberOfPayloads();}
 	public boolean isInvocationTypeSynchronous( ) { return mapBoolConfig.get(KEY_INVOCATION_TYPE); }
@@ -65,6 +65,7 @@ public class Config implements ConfigConstants {
 	public String getAcessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_KEY);}
 	public String getAWSRegion() { return mapStringConfig.get(KEY_AWS_REGION);}
 	public String getSecretAccessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_SECRET_KEY);}
+	public String getLambdaFunctionARN() { return mapStringConfig.get(KEY_LAMBDA_ARN);}
 	public int getProxyPort() { return mapIntConfig.get(KEY_PROXY_PORT);}
 	public boolean hasProxy() {return DO_NOT_USE_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_PROXY_HOST)) ? false : true;}
 	public boolean userDefaultCredentialsProvider() {return USE_DEFAULT_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_AWS_ACCESS_KEY)) ? true : false;}
@@ -95,7 +96,7 @@ public class Config implements ConfigConstants {
 		captureStringInput(scanner, KEY_LAMBDA_ARN, LAMBDA_ARN_MSG, ++inputCounter);
 		captureStringInput(scanner, KEY_AWS_REGION, AWS_REGION_MSG, ++inputCounter);
 		captureBooleanInput(scanner, KEY_INVOCATION_TYPE, INVOCATION_TYPE_MSG, ++inputCounter);
-		if (!captureIntInput(scanner, KEY_NUM_TOTAL_INVOCATION, NUM_TOTAL_INVOCATION_MSG,0, ++inputCounter)) return false;
+		if (!captureIntInput(scanner, KEY_NUM_INVOCATION, NUM_INVOCATION_MSG,0, ++inputCounter)) return false;
 		//Special Handling For Memory Range
 		if (!captureMemoryRange(scanner, ++inputCounter)) return false;
 		
@@ -317,11 +318,11 @@ public class Config implements ConfigConstants {
 			return false;
 		} else mapStringConfig.put(KEY_AWS_REGION, obj.toString());
 		
-		obj = jsonObject.get(KEY_NUM_TOTAL_INVOCATION);
+		obj = jsonObject.get(KEY_NUM_INVOCATION);
 		if (obj == null || !Util.isNumeric(obj.toString())) {
-			logger.print("Aborting Operation-->Invalid Key [" + KEY_NUM_TOTAL_INVOCATION + "] From Config File As " + (obj == null ? "It Does Not Exist" : "It Is Not A Number"));
+			logger.print("Aborting Operation-->Invalid Key [" + KEY_NUM_INVOCATION + "] From Config File As " + (obj == null ? "It Does Not Exist" : "It Is Not A Number"));
 			return false;
-		} else mapIntConfig.put(KEY_NUM_TOTAL_INVOCATION, Integer.parseInt(obj.toString()));
+		} else mapIntConfig.put(KEY_NUM_INVOCATION, Integer.parseInt(obj.toString()));
 		
 		obj = jsonObject.get(KEY_MIN_MAX_MEMORY);
 		if (obj != null ) {
@@ -344,7 +345,8 @@ public class Config implements ConfigConstants {
 			mapStringConfig.put(KEY_JSON_PAYLOAD, obj.toString());
 		}
 		
-		logger.print("Configuration From File [" + configFilePath + "] Loaded Succesfully");
+		logger.print("Configuration From File [" + configFilePath + "] Loaded Succesfully. Configuration Loaded Are Below");
+		printAllConfiguration();
 		
 		return true;
 	}
