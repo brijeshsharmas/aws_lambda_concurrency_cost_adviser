@@ -28,8 +28,13 @@
 		<dependency>
     		<groupId>com.amazonaws</groupId>
     		<artifactId>aws-java-sdk-lambda</artifactId>
-   		 <version>1.11.858</version>
-</dependency>
-		
+   		 	<version>1.11.858</version>
+   		 </dependency>
+   		 <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-cloudwatch -->
+		<dependency>
+   		 	<groupId>com.amazonaws</groupId> 
+    		<artifactId>aws-java-sdk-cloudwatch</artifactId>
+    		<version>1.11.860</version>
+		</dependency>		
   </dependencies>
 </project>

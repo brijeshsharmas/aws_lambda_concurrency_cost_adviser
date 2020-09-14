@@ -3,6 +3,9 @@
  */
 package os.aws.lambda.cal;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * @author Brijesh Sharma
  *
@@ -11,6 +14,7 @@ public class Logger {
 	
 	private boolean writeToFile = false;
 	private static Logger logger = null;
+	private List<String> listTabs = new ArrayList<String>();
 	
 	/*******************************************************SINGLETOM IMPLEMENTATION**********************************************************************/
 	protected Logger() {}
@@ -31,25 +35,48 @@ public class Logger {
 	}
 	
 	public void print(String msg) {
-		System.out.println(msg);
+		printAndWrite(msg);
 	}
 	public void printStarLine() {
-		System.out.println("**************************************************************************************************************");
+		printAndWrite("**************************************************************************************************************");
 	}
 	public void printStarLine(String msg) {
-		System.out.println("********************************" + msg + "***************************************");
+		printAndWrite("********************************" + msg + "***************************************");
 	}
 	public void printUnderscoreLine() {
-		System.out.println("______________________________________________________________________________________________________________");
+		printAndWrite("______________________________________________________________________________________________________________");
 	}
 	public void printMinusLine() {
-		System.out.println("--------------------------------------------------------------------------------------------------------------");
+		printAndWrite("--------------------------------------------------------------------------------------------------------------");
 	}
 	public void printForwardSlashLine() {
-		System.out.println("//////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+		printAndWrite("//////////////////////////////////////////////////////////////////////////////////////////////////////////////");
 	}
 	public void printBlankLine() {
-		System.out.println("");
+		printAndWrite("");
 	}
+	public void printAbortMessage(String msg) {
+		printBlankLine();
+		printForwardSlashLine();
+		printStarLine(msg);
+		printForwardSlashLine();
+		printBlankLine();
+	}
+	public void startSectionWithNewSection(String msg) {
+		listTabs.add("  ");
+		printAndWrite(msg);
+		
+	}
+	public void endSection(String msg) {
+		listTabs.clear();
+		printAndWrite(msg);
+		
+	}
+	private void printAndWrite(String msg) {
+		for(String str: listTabs) System.out.print(str);
+		System.out.println(msg);
+		
+	}
+	
 
 }

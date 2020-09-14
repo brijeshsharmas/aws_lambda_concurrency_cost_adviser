@@ -32,7 +32,7 @@ public interface ConfigConstants {
 	public static String KEY_PROXY_HOST = "PROXY_HOST";
 	public static String KEY_PROXY_PORT = "PROXY_PORT";
 	public static String KEY_LOG_MESSAGE = "LOG_MESSAGE";
-	public static String KEY_LAMBDA_ARN = "LAMBDA_ARN";
+	public static String KEY_LAMBDA_FUNCTION = "LAMBDA_FUNCTION";
 	public static String KEY_MIN_MAX_MEMORY = "MIN_MAX_MEMORY";
 	public static String KEY_NUM_INVOCATION = "NUM_INVOCATION";
 	public static String KEY_JSON_PAYLOAD = "JSON_PAYLOAD";
@@ -46,7 +46,7 @@ public interface ConfigConstants {
 	public static String PROXY_HOST_MSG = "If You Are Using Proxy, Please Enter Proxy Host, Else Enter \"NO\" Without \"\"";
 	public static String PROXY_PORT_MSG = "Please Enter Proxy Port";
 	public static String LOG_MESSAGE_MSG = "Please Enter true/false If You Want To Log All Messages (Logs Will Be Written In calc.log In The Current Directory)";
-	public static String LAMBDA_ARN_MSG = "Please Provide Fully Qualified Lambda ARN";
+	public static String LAMBDA_FUNCTION_MSG = "Please Provide Lambda Function Name Or Fully Qualified Lambda ARN";
 	public static String CONFIRMATION_CONTINUUE_MSG = "Do You Want To Continue (yes/no)";
 	public static String CONFIRMATION_SAVE_CONFIGURATION_MSG = "Do You Want To Save (yes/no) These Configuration In A File For Later. You Can Use Saved Configuration Using Option --file <<file_path>> Argument";
 	public static String MIN_MAX_MEMORY_LIST_MSG = "Valid Values Are [128, 192, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, " + 
@@ -63,6 +63,7 @@ public interface ConfigConstants {
 														"c) Min Must Less Than Or Equal To Max, Increment Must Of In Order 64 mb. Please Try Again";
 	public static String INVOCATION_TYPE_MSG = "Please Confim (true/false) If  Lambda Invocation Type Is SYNCHRONOUS, Enter false ASYNCHRONOUS";
 	public static String AWS_REGION_MSG = "Please Enter AWS Region (such as us-east-1, eu-west-1, etc) Of Your Lambda Function";
+	public static String METRIC_COLLECTION_SLEEP_MSG = "Going On Sleep For Seventy (70) Seconds To Ensure Lambda Publishes Metrics To CloudWatch";
 
 	//Help Keys
 	public static String ARGUMENT_HELP = "--help";
@@ -77,7 +78,7 @@ public interface ConfigConstants {
 		list.add(KEY_AWS_ACCESS_KEY);
 		list.add(KEY_AWS_ACCESS_SECRET_KEY);
 		list.add(KEY_JSON_PAYLOAD);
-		list.add(KEY_LAMBDA_ARN);
+		list.add(KEY_LAMBDA_FUNCTION);
 		list.add(KEY_MIN_MAX_MEMORY);
 		list.add(KEY_PROXY_HOST);
 		
@@ -97,7 +98,7 @@ public interface ConfigConstants {
 	default List<String> getMandatoryPropertyListForLoadingConfiguration () {
 		List<String> list = new ArrayList<String>();
 		list.add(KEY_NUM_INVOCATION);
-		list.add(KEY_LAMBDA_ARN);
+		list.add(KEY_LAMBDA_FUNCTION);
 		return list;
 	}
 	default boolean isMandatoryProperty () {

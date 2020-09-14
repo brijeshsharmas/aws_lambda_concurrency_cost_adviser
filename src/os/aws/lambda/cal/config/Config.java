@@ -59,16 +59,18 @@ public class Config implements ConfigConstants {
 	public int getNumberOfInvocationPerCycle() { return mapIntConfig.get(KEY_NUM_INVOCATION);}
 	public int getNumberOfMemoryAdjustmentCycles() { return 1 + (getMaxMemoryNumber()-getMinMemoryNumber()) / getIncrementMemoryNumber();}
 	public int getNumberOfPayloads() { return jsonPayLoad == null ? 0: jsonPayLoad.getNumberOfPayloads();}
+	public int[] getPayloadSpread() { return jsonPayLoad == null ? new int[0] : jsonPayLoad.getPayloadSpread(getNumberOfInvocationPerCycle());}
 	public boolean isInvocationTypeSynchronous( ) { return mapBoolConfig.get(KEY_INVOCATION_TYPE); }
 	public String getPayloadSpreadString() {return jsonPayLoad == null ? "" : jsonPayLoad.getPayloadSpreadString(getNumberOfInvocationPerCycle()); }
 	public String getProxyHost() { return mapStringConfig.get(KEY_PROXY_HOST);}
 	public String getAcessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_KEY);}
 	public String getAWSRegion() { return mapStringConfig.get(KEY_AWS_REGION);}
+	public String getPayloadBody(int index) { return jsonPayLoad == null ? null : (jsonPayLoad.getBody(index) == null ? null : jsonPayLoad.getBody(index).toJSONString());}
 	public String getSecretAccessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_SECRET_KEY);}
-	public String getLambdaFunctionARN() { return mapStringConfig.get(KEY_LAMBDA_ARN);}
+	public String getLambdaFunctionConfig() { return mapStringConfig.get(KEY_LAMBDA_FUNCTION);}
 	public int getProxyPort() { return mapIntConfig.get(KEY_PROXY_PORT);}
 	public boolean hasProxy() {return DO_NOT_USE_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_PROXY_HOST)) ? false : true;}
-	public boolean userDefaultCredentialsProvider() {return USE_DEFAULT_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_AWS_ACCESS_KEY)) ? true : false;}
+	public boolean useDefaultCredentialsProvider() {return USE_DEFAULT_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_AWS_ACCESS_KEY)) ? true : false;}
 	
 	/*******************************************************CAPTURE AND VALIDATE CONFIGURATION******************************************************************/
 	public boolean confirmYesNo(String confirmMessage) {
@@ -93,7 +95,7 @@ public class Config implements ConfigConstants {
 			if (!captureIntInput(scanner, KEY_PROXY_PORT, PROXY_PORT_MSG,0, ++inputCounter)) return false;
 		
 		//Lambda Config
-		captureStringInput(scanner, KEY_LAMBDA_ARN, LAMBDA_ARN_MSG, ++inputCounter);
+		captureStringInput(scanner, KEY_LAMBDA_FUNCTION, LAMBDA_FUNCTION_MSG, ++inputCounter);
 		captureStringInput(scanner, KEY_AWS_REGION, AWS_REGION_MSG, ++inputCounter);
 		captureBooleanInput(scanner, KEY_INVOCATION_TYPE, INVOCATION_TYPE_MSG, ++inputCounter);
 		if (!captureIntInput(scanner, KEY_NUM_INVOCATION, NUM_INVOCATION_MSG,0, ++inputCounter)) return false;
@@ -119,7 +121,7 @@ public class Config implements ConfigConstants {
 			mapStringConfig.put(KEY_JSON_PAYLOAD, DO_NOT_USE_VALUE);
 			if(i<2) logger.print("Invalid File [" + payloadValue + "] Path Or Json Payload File. Please Try Again");
 			else  {
-				logger.print("Invalid File [" + payloadValue + "] Path Or Json Payload File. Max Attempts Tried, Aborting Operation");
+				logger.printAbortMessage("Invalid File [" + payloadValue + "] Path Or Json Payload File. Max Attempts Tried, Aborting Operation");
 				return false;
 			}
 		}
@@ -156,7 +158,7 @@ public class Config implements ConfigConstants {
 				if (i  < 2) 
 					logger.print(INVALID_MIN_MAX_INCREMENT_MSG);
 				else {
-					logger.print("Tried Max Attempts. Invalid Min-Max-Increment Values Specified. Aborting Operation");
+					logger.printAbortMessage("Tried Max Attempts. Invalid Min-Max-Increment Values Specified. Aborting Operation");
 					return false;
 				}
 				
@@ -185,7 +187,7 @@ public class Config implements ConfigConstants {
 			mapIntConfig.put(key, parsedValue);
 		}catch(NumberFormatException e) {
 			if(attemptCounter > 1) {
-				logger.print("Error Converting Input To Int. Max Attempt Reached. Aborting Operation.");
+				logger.printAbortMessage("Error Converting Input To Int. Max Attempt Reached. Aborting Operation.");
 				return false;
 			}
 			logger.print("Error Converting Input To Int. Please Try Again");
@@ -234,6 +236,7 @@ public class Config implements ConfigConstants {
 	
 	/******************************************PRINT-LOGGING, CLEAN METHODS******************************************************************************************/
 	private void printAttempMsg(String key, String inputMessage, int attemptCounter, int inputCounter) {
+		logger.printBlankLine();
 		if(attemptCounter > 0)
 			print(key, "Attempt No (" + (attemptCounter+1) + ")-->Input Message=" + inputMessage, inputCounter);
 		else
@@ -284,7 +287,7 @@ public class Config implements ConfigConstants {
 		if (obj != null && !USE_DEFAULT_VALUE.equalsIgnoreCase(obj.toString())) {
 			String secret = (String)jsonObject.get(KEY_AWS_ACCESS_SECRET_KEY);
 			if(secret == null) {
-				logger.print("Aborting Operation-->Missing Key [" + KEY_AWS_ACCESS_SECRET_KEY + "] From Config File");
+				logger.printAbortMessage("Aborting Operation-->Missing Key [" + KEY_AWS_ACCESS_SECRET_KEY + "] From Config File");
 				return false;
 			}
 			mapStringConfig.put(KEY_AWS_ACCESS_KEY, obj.toString());
@@ -300,27 +303,27 @@ public class Config implements ConfigConstants {
 		if (obj != null && !DO_NOT_USE_VALUE.equalsIgnoreCase(obj.toString())) {
 			Object port = jsonObject.get(KEY_PROXY_PORT);
 			if (port == null || !Util.isNumeric(port.toString())) {
-				logger.print("Aborting Operation-->Invalid Key [" + KEY_PROXY_PORT + "] From Config File As " + (port == null ? "It Does Not Exist" : "It Is Not A Number"));
+				logger.printAbortMessage("Aborting Operation-->Invalid Key [" + KEY_PROXY_PORT + "] From Config File As " + (port == null ? "It Does Not Exist" : "It Is Not A Number"));
 				return false;
 			}
 			mapStringConfig.put(KEY_PROXY_HOST, obj.toString());
 			mapIntConfig.put(KEY_PROXY_PORT, Integer.parseInt(port.toString()));
 		}
 		
-		obj = jsonObject.get(KEY_LAMBDA_ARN);
+		obj = jsonObject.get(KEY_LAMBDA_FUNCTION);
 		if (obj == null) {
-			logger.print("Aborting Operation-->Missing Mandatory Key [" + KEY_LAMBDA_ARN + "] From Config File");
+			logger.printAbortMessage("Aborting Operation-->Missing Mandatory Key [" + KEY_LAMBDA_FUNCTION + "] From Config File");
 			return false;
-		} else mapStringConfig.put(KEY_LAMBDA_ARN, obj.toString());
+		} else mapStringConfig.put(KEY_LAMBDA_FUNCTION, obj.toString());
 		obj = jsonObject.get(KEY_AWS_REGION);
 		if (obj == null) {
-			logger.print("Aborting Operation-->Missing Mandatory Key [" + KEY_AWS_REGION + "] From Config File");
+			logger.printAbortMessage("Aborting Operation-->Missing Mandatory Key [" + KEY_AWS_REGION + "] From Config File");
 			return false;
 		} else mapStringConfig.put(KEY_AWS_REGION, obj.toString());
 		
 		obj = jsonObject.get(KEY_NUM_INVOCATION);
 		if (obj == null || !Util.isNumeric(obj.toString())) {
-			logger.print("Aborting Operation-->Invalid Key [" + KEY_NUM_INVOCATION + "] From Config File As " + (obj == null ? "It Does Not Exist" : "It Is Not A Number"));
+			logger.printAbortMessage("Aborting Operation-->Invalid Key [" + KEY_NUM_INVOCATION + "] From Config File As " + (obj == null ? "It Does Not Exist" : "It Is Not A Number"));
 			return false;
 		} else mapIntConfig.put(KEY_NUM_INVOCATION, Integer.parseInt(obj.toString()));
 		
@@ -330,7 +333,7 @@ public class Config implements ConfigConstants {
 			int maxMemoryRange = Util.getIntValueByPosition(obj.toString(), 1, "-");
 			int incrementMemoryRange = Util.getIntValueByPosition(obj.toString(), 2, "-");
 			if(!isValidLambdaMemoryConfiguration(minMemoryRange, maxMemoryRange, incrementMemoryRange)) { 
-				logger.print("Aborting Operation-->" + INVALID_MIN_MAX_INCREMENT_MSG);
+				logger.printAbortMessage("Aborting Operation-->" + INVALID_MIN_MAX_INCREMENT_MSG);
 				return false;
 			}
 			mapStringConfig.put(KEY_MIN_MAX_MEMORY, obj.toString());
