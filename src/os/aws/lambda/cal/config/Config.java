@@ -17,6 +17,8 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import com.amazonaws.services.lambda.model.InvocationType;
+
 import os.aws.lambda.cal.Logger;
 import os.aws.lambda.cal.modal.JsonPayload;
 import os.aws.lambda.cal.util.Util;
@@ -53,23 +55,32 @@ public class Config implements ConfigConstants {
 	public String getStringConfigValue(String key) { return mapStringConfig.get(key);	}
 	public int getIntConfigValue(String key) { return mapIntConfig.get(key);	}
 	public boolean getBooleanConfigValue(String key) { return mapBoolConfig.get(key);	}
+	
+	public String getLambdaFunctionConfig() { return mapStringConfig.get(KEY_LAMBDA_FUNCTION);}
+	
 	public int getMinMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 0, MIN_MAX_DELIMETER);}
 	public int getMaxMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 1, MIN_MAX_DELIMETER);}
 	public int getIncrementMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 2, MIN_MAX_DELIMETER);}
+	
 	public int getNumberOfInvocationPerCycle() { return mapIntConfig.get(KEY_NUM_INVOCATION);}
 	public int getNumberOfMemoryAdjustmentCycles() { return 1 + (getMaxMemoryNumber()-getMinMemoryNumber()) / getIncrementMemoryNumber();}
+	
 	public int getNumberOfPayloads() { return jsonPayLoad == null ? 0: jsonPayLoad.getNumberOfPayloads();}
 	public int[] getPayloadSpread() { return jsonPayLoad == null ? new int[0] : jsonPayLoad.getPayloadSpread(getNumberOfInvocationPerCycle());}
-	public boolean isInvocationTypeSynchronous( ) { return mapBoolConfig.get(KEY_INVOCATION_TYPE); }
 	public String getPayloadSpreadString() {return jsonPayLoad == null ? "" : jsonPayLoad.getPayloadSpreadString(getNumberOfInvocationPerCycle()); }
-	public String getProxyHost() { return mapStringConfig.get(KEY_PROXY_HOST);}
-	public String getAcessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_KEY);}
-	public String getAWSRegion() { return mapStringConfig.get(KEY_AWS_REGION);}
 	public String getPayloadBody(int index) { return jsonPayLoad == null ? null : (jsonPayLoad.getBody(index) == null ? null : jsonPayLoad.getBody(index).toJSONString());}
-	public String getSecretAccessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_SECRET_KEY);}
-	public String getLambdaFunctionConfig() { return mapStringConfig.get(KEY_LAMBDA_FUNCTION);}
+	
+	public boolean isInvocationTypeSynchronous( ) { return mapBoolConfig.get(KEY_INVOCATION_TYPE); }
+	public InvocationType getInvocationType( ) { return isInvocationTypeSynchronous() ? InvocationType.RequestResponse : InvocationType.Event;}
+	
+	public String getProxyHost() { return mapStringConfig.get(KEY_PROXY_HOST);}
 	public int getProxyPort() { return mapIntConfig.get(KEY_PROXY_PORT);}
 	public boolean hasProxy() {return DO_NOT_USE_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_PROXY_HOST)) ? false : true;}
+	
+	public String getAWSRegion() { return mapStringConfig.get(KEY_AWS_REGION);}
+	
+	public String getAcessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_KEY);}
+	public String getSecretAccessKey() { return mapStringConfig.get(KEY_AWS_ACCESS_SECRET_KEY);}
 	public boolean useDefaultCredentialsProvider() {return USE_DEFAULT_VALUE.equalsIgnoreCase(mapStringConfig.get(KEY_AWS_ACCESS_KEY)) ? true : false;}
 	
 	/*******************************************************CAPTURE AND VALIDATE CONFIGURATION******************************************************************/

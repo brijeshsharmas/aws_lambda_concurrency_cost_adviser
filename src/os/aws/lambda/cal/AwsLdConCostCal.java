@@ -1,48 +1,36 @@
-package os.aws.lambda.cal;
+/**
+ * @author Brijesh Sharma
+ *
+ */
 
+package os.aws.lambda.cal;
 
 import os.aws.lambda.cal.config.Config;
 import os.aws.lambda.cal.modal.JsonPayload;
 import os.aws.lambda.cal.service.AWSServiceFactory;
-import os.aws.lambda.cal.util.Renderer;
 import os.aws.lambda.cal.util.Util;
 
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_MIN_MAX_MEMORY;
-import static os.aws.lambda.cal.config.ConfigConstants.KEY_NUM_INVOCATION;
-import static os.aws.lambda.cal.config.ConfigConstants.KEY_INVOCATION_TYPE;
-
 import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP;
 import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP_JSON;
 import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_FILE;
-
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_WEIGHT;
 import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP_VALIDATE;
 import static os.aws.lambda.cal.config.ConfigConstants.CONFIRMATION_CONTINUUE_MSG;
 import static os.aws.lambda.cal.config.ConfigConstants.CONFIRMATION_SAVE_CONFIGURATION_MSG;
 import static os.aws.lambda.cal.config.ConfigConstants.METRIC_COLLECTION_SLEEP_MSG;
 
-import static os.aws.lambda.cal.util.Renderer.INT_STAR_LINE_WITH_MESSAGE;
-import static os.aws.lambda.cal.util.Renderer.INT_UNDERSCORE_LINE;
-import static os.aws.lambda.cal.util.Renderer.INT_BLANK_LINE;
-import static os.aws.lambda.cal.util.Renderer.INT_DO_NOTHING;
-import static os.aws.lambda.cal.util.Renderer.INT_MINUS_LINE;
-import static os.aws.lambda.cal.util.Renderer.INT_FORWARD_LINE;
-
 import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.amazonaws.DefaultRequest;
-import com.amazonaws.metrics.RequestMetricCollector;
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
 import com.amazonaws.services.cloudwatch.model.AmazonCloudWatchException;
 import com.amazonaws.services.cloudwatch.model.Dimension;
-import com.amazonaws.services.cloudwatch.model.DimensionFilter;
 import com.amazonaws.services.cloudwatch.model.GetMetricDataRequest;
 import com.amazonaws.services.cloudwatch.model.GetMetricDataResult;
-import com.amazonaws.services.cloudwatch.model.ListMetricsRequest;
-import com.amazonaws.services.cloudwatch.model.ListMetricsResult;
 import com.amazonaws.services.cloudwatch.model.Metric;
 import com.amazonaws.services.cloudwatch.model.MetricDataQuery;
 import com.amazonaws.services.cloudwatch.model.MetricDataResult;
@@ -52,21 +40,17 @@ import com.amazonaws.services.lambda.model.AWSLambdaException;
 import com.amazonaws.services.lambda.model.InvocationType;
 import com.amazonaws.services.lambda.model.InvokeRequest;
 import com.amazonaws.services.lambda.model.InvokeResult;
-import com.amazonaws.services.lambda.model.ListFunctionsResult;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
-import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationResult;
-import com.amazonaws.util.AWSRequestMetrics;
 
 
 public class AwsLdConCostCal {
 	
 	private static String buildVersion = "1.0";
-	private static String name = "Lambda Concurrency & Cost Optimizer";
-	private ConcurrentHashMap<Integer, Double> mapMemoryAndResponse = new ConcurrentHashMap<Integer, Double>();
-	private ConcurrentHashMap<Integer, Double> mapMemoryAndInvocations = new ConcurrentHashMap<Integer, Double>();
+	private static String name = "Lambda Concurrency & Cost Optimizer Tool";
+	private ConcurrentHashMap<Integer, Integer> mapMemoryAndResponse = new ConcurrentHashMap<Integer, Integer>();
+	private ConcurrentHashMap<Integer, Integer> mapMemoryAndInvocations = new ConcurrentHashMap<Integer, Integer>();
 	
 	private static Logger logger = Logger.getLogger();
-	private static Renderer renderer = Renderer.getRenderer();
 	private static Config config = Config.getConfig();
 	private AWSServiceFactory factory = AWSServiceFactory.getFactory();
 	private volatile float passedInvocation=0.0f, failedInvocation=0.0f, errorThreshold=0.02f;
@@ -78,120 +62,117 @@ public class AwsLdConCostCal {
 	/***********************************************MAIN-METHOD********************************************************************************/
 	public static void main(String[] args) { 
 		if (args.length > 0 && ARGUMENT_HELP.equalsIgnoreCase(args[0]))  {executeHelpSection(args); return;} 
-		start(args);
+		
+		try { start(args);}finally {logger.closeFile();}
 	}
 	private static void start(String []args) {
 		startupMessage();
 		new AwsLdConCostCal().kickOff(args); 
 	}
 	public void kickOff(String[] args) {
-		
-		int[] renderArgs = {INT_UNDERSCORE_LINE, INT_BLANK_LINE, INT_STAR_LINE_WITH_MESSAGE, INT_DO_NOTHING, INT_DO_NOTHING, INT_DO_NOTHING};
 		args = Util.toLowerCase(args);
 		
 		switch(args.length) {
 		case 0: 
-			if(!captureConfiguration(args, renderArgs)) return;
+			if(!doAbort_IfCaptureConfiguration_Fail(args)) return;
 			break;
 		default:
 			switch(args[0]) {
 			case ARGUMENT_FILE:
-				if (!loadConfiguration(args, renderArgs)) return;
+				if (!loadConfiguration(args)) return;
 			}
 		}
 		
-		execute(renderArgs);	
+		execute();	
 	}
 	
 	/***********************************************PREP-AND-VALIDATION********************************************************************************/
-	private boolean loadConfiguration(String [] args, int[] renderArgs) {
+	private boolean loadConfiguration(String [] args) {
 		if(args.length < 2) {
 			logger.print("Missing Config File/Path Argument. Plese Use " + ARGUMENT_FILE + " <<config.json>>");
 			return false;
 		}
-		renderer.printLine(renderArgs, "Loading Configuration");
-		boolean loadConfigStatus =  config.loadConfiguration(args[1]);
-		renderArgs[2] = INT_DO_NOTHING;
-		renderer.printLine(renderArgs);
-		return loadConfigStatus;
+		
+		logger.beginNewSection("Begin Loading Configuration");
+		if (!config.loadConfiguration(args[1])) return false;
+		logger.endNewSection("End Loading Configuration");
+		return true;
 		
 	}
-	private boolean captureConfiguration(String [] args, int[] renderArgs) { 
-		renderer.printLine(renderArgs, "Begin Capturing Configuration");
+	private boolean doAbort_IfCaptureConfiguration_Fail(String [] args) { 
+		logger.beginNewSection("Begin Capturing Configuration");
+		
 		//Capture and Validate Input
-		boolean captureConfigPassed = config.captureAndValidateInput();
+		if (! config.captureAndValidateInput()) return false;
 		
-		renderer.printLine(renderArgs, "Configuration Provided By User Are Below");
+		logger.beginNewSubSection("Configuration Provided By User Are Below");
 		config.printAllConfiguration();
-		
-		renderArgs[2] = INT_DO_NOTHING;
-		renderer.printLine(renderArgs);
+		logger.endNewSubSection();
 		
 		if (config.confirmYesNo(CONFIRMATION_SAVE_CONFIGURATION_MSG)) config.saveConfiguration();
-		renderer.printLine(renderArgs);
 		
-		return captureConfigPassed;
+		logger.endNewSection("End Capturing Configuration");
+		
+		return true;
 	}
 
 	/************************************************EXECUTION SECTION*******************************************************************************/
-	private void execute(int[] renderArgs) {
-		renderArgs[0]=INT_DO_NOTHING; renderArgs[1]=INT_DO_NOTHING; renderArgs[2] = INT_STAR_LINE_WITH_MESSAGE;
-		renderer.printLine(renderArgs, "Begin Executing Configuration");
+	private void execute() {
 		
+		logger.beginNewSection("Begin Planned Execution Summary & Confirmation");
 		summarizeExecution();
-		renderArgs[2] = INT_MINUS_LINE;
-		renderer.printLine(renderArgs, "");
+		if (!config.confirmYesNo(CONFIRMATION_CONTINUUE_MSG)) return;
+		logger.endNewSection("End Planned Execution Summary & Confirmation");
 		
-		//if (!config.confirmYesNo(CONFIRMATION_CONTINUUE_MSG)) return;
-		
-		executeScenarios(renderArgs);
+		executeScenarios();
 		
 	}
-	private boolean executeScenarios(int[] renderArgs) {
-		renderArgs[0]=INT_UNDERSCORE_LINE; renderArgs[1]=INT_STAR_LINE_WITH_MESSAGE; renderArgs[2] = INT_DO_NOTHING;
-		//if(doAbort_IfPreliminaryTest_Fail(renderArgs)) return false;
+	private boolean executeScenarios() {
+		
+		if(doAbort_IfPreliminaryTest_Fail()) return false;
 		
 		//Reset passed, failed Counters And Begin Execution For each Memory Size Configuration
 		resetCounters();
 		for(int memorySize=config.getMinMemoryNumber(); memorySize<=config.getMaxMemoryNumber(); memorySize=memorySize+config.getIncrementMemoryNumber()) {
-			renderArgs[0]=INT_UNDERSCORE_LINE; renderArgs[1]=INT_STAR_LINE_WITH_MESSAGE; 
-			renderer.printLine(renderArgs, "Begin Execution For Memory [" + memorySize + "]");
+			
+			logger.beginNewSection("Begin Execution For Memory [" + memorySize + "]");
 			
 			//Update Lambda Memory Configuration
-			if(doAbort_IfUpdateMemoryAdjustment_Fail(memorySize, renderArgs)) return false;
+			if(doAbort_IfUpdateMemoryAdjustment_Fail(memorySize)) return false;
 			
 			//Reset Metric Collection Counter & Execute All Payloads
 			long startTime = System.currentTimeMillis();
-			if(doAbort_IfLambdaInvocation_AllPayloads_Fail(renderArgs)) return false;
+			if(doAbort_IfLambdaInvocation_AllPayloads_Fail()) return false;
 			logger.print(METRIC_COLLECTION_SLEEP_MSG);
 			sleepSeventySeconds();
 			long endTime = System.currentTimeMillis();
 			
-			if(doAbort_IfLambdaMetricCollection_Fail(memorySize, startTime, endTime, true)) return false;
+			if(doAbort_IfCollectLambdaMetricFails(memorySize, startTime, endTime, 1)) return false;
 			
-			renderArgs[0]=INT_STAR_LINE_WITH_MESSAGE; renderArgs[1]=INT_UNDERSCORE_LINE;
-			renderer.printLine(renderArgs, "Ended Execution For Memory [" + memorySize + "]");
+			
+			logger.endNewSection("Ended Execution For Memory [" + memorySize + "]");
 		}
 		
+		printFinalSummary();
 		
 		return true;
 	}
-	private boolean doAbort_IfPreliminaryTest_Fail(int[] renderArgs) {
-		renderer.printLine(renderArgs, "Running-->Lambda Function Preliminary Tests");
+	private boolean doAbort_IfPreliminaryTest_Fail() {
+		logger.beginNewSection("Running-->Lambda Function Preliminary Tests");
 		
-		logger.print("Test-->DryRun-->Invoking Lambda Function With Invocation Type [" + InvocationType.DryRun + "]");
 		resetInvokeRequestWithDryRunInvocationType();
-		if(doAbort_IfLambdaInvocation_Fail(getInvokeRequest(), renderArgs, false)) return true;
-		logger.print("Passed-->Test-->DryRun-->Invoking Lambda Function With Invocation Type [" + getInvokeRequest().getInvocationType() + "]");
+		logger.print("Test-->DryRun-->Invoking Lambda Function With Invocation Type [" + getInvokeRequest().getInvocationType() + "]");
+		if(doAbort_IfLambdaInvocation_Fail(getInvokeRequest(), false)) return true;
+		logger.print("\tPassed-->Test-->DryRun-->Invoking Lambda Function With Invocation Type [" + getInvokeRequest().getInvocationType() + "]");
 		
-		logger.print("Test-->Update Memory Configuration-->Set To 128");
-		if (doAbort_IfUpdateMemoryAdjustment_Fail(128, renderArgs)) return true;
-		logger.print("Passed-->Test-->Update Memory Configuration-->Set To 128");
+		logger.print("Test-->Update Memory Configuration With Lowest Memory Configuration-->Set To [" + config.getMinMemoryNumber() + "]");
+		if (doAbort_IfUpdateMemoryAdjustment_Fail(config.getMinMemoryNumber())) return true;
+		logger.print("\tPassed-->Test-->Update Memory Configuration-->Set To 128");
 		
 		if(config.getNumberOfPayloads() == 0) 
 			logger.print("Skiping Payload Tests As No Payload Specified In The Configuration");
 		else {
-			getInvokeRequest().setInvocationType(InvocationType.RequestResponse);
+			getInvokeRequest().setInvocationType(config.getInvocationType());
 			logger.print("Test-->Payload Test-->Invoking Lambda Function With Each Payload Using Invocation Type [" + getInvokeRequest().getInvocationType() + "]");
 			for(int i=0; i<config.getNumberOfPayloads(); i++) {
 				if(config.getPayloadBody(i) == null) {
@@ -199,21 +180,34 @@ public class AwsLdConCostCal {
 					return false;
 				}
 				getInvokeRequest().withPayload(ByteBuffer.wrap(config.getPayloadBody(i).getBytes()));
-				if(doAbort_IfLambdaInvocation_Fail(getInvokeRequest(), renderArgs, false)) return true;
-				logger.print("Passed-->Payload [" + i + "] Test");
+				if(doAbort_IfLambdaInvocation_Fail(getInvokeRequest(), false)) return true;
+				logger.print("\tPassed-->Payload [" + i + "] Test");
 			}
 			
 			logger.print("Passed-->All Payloads Test");
 		}
 		
-		//TO-DO Add test for Cloudwatch metrics
+		AmazonCloudWatch cloudWatchClient = factory.getAWSCloudWatchClient();
+		long currentTime = System.currentTimeMillis();
+		try { 
+			logger.print("Test-->Collect Lambda Function Metrics From CloudWatch");
+			GetMetricDataRequest metricRequest = getMetricDataRequestForAverageResponse("m" + currentTime, new Date(currentTime), new Date(currentTime+10000));
+			cloudWatchClient.getMetricData(metricRequest);
+			logger.print("\tPassed-->Collect Lambda Function Metrics From CloudWatch");
+		}catch(AmazonCloudWatchException exception ) {
+			logger.printAbortMessage("Aborting Operation-->AmazonCloudWatchException-->Collecting Metrics. Error [" + exception.getMessage() + "]");
+			return true;
+		}catch(Exception exception) {
+			logger.printAbortMessage("Aborting Operation-->General Exception-->Collecting Metrics. Error [" + exception.getMessage() + "]");
+			return true;
+		}
 		
-		renderArgs[1]=INT_UNDERSCORE_LINE; renderArgs[0]=INT_STAR_LINE_WITH_MESSAGE;
-		renderer.printLine(renderArgs, "Passed-->Lambda Function Preliminary Tests");
+		
+		logger.endNewSection("Passed-->Lambda Function Preliminary Tests");
 		return false;
 	}
 	/**To Execute This Operation, IAM User Must Have lambda:UpdateFunctionConfiguraton permission**/
-	private boolean doAbort_IfUpdateMemoryAdjustment_Fail(int memorySize, int[] renderArgs) {
+	private boolean doAbort_IfUpdateMemoryAdjustment_Fail(int memorySize) {
 		AWSLambda lambdaClient = factory.getAWSLambdaClient();
 		getUpdateMemoryAdjustmentRequest().setMemorySize(memorySize);
 		
@@ -229,13 +223,13 @@ public class AwsLdConCostCal {
 		
 		return false;
 	}
-	private boolean doAbort_IfLambdaInvocation_AllPayloads_Fail(int [] renderArgs) {
+	private boolean doAbort_IfLambdaInvocation_AllPayloads_Fail() {
 		resetInvokeRequestWithRequestResponseInvocationType();
 		
 		int[] payloadSpread = config.getPayloadSpread();
 		for(int payloadCounter=0; payloadCounter <payloadSpread.length; payloadCounter++) {
 			if(payloadSpread[payloadCounter] == 0) continue;
-			logger.print("Begin Invoking Lambda Function For Payload [" + payloadCounter + "], Total Execution Planned [" + payloadSpread[payloadCounter] + 
+			logger.print("\tBegin Invoking Lambda Function For Payload [" + payloadCounter + "], Total Execution Planned [" + payloadSpread[payloadCounter] + 
 					"] With Mode [" + getInvokeRequest().getInvocationType() + "]");
 			
 			String payloadBody = config.getPayloadBody(payloadCounter);
@@ -245,65 +239,65 @@ public class AwsLdConCostCal {
 			}
 			getInvokeRequest().withPayload(ByteBuffer.wrap(payloadBody.getBytes()));
 			for(int i=0; i<payloadSpread[payloadCounter]; i++)
-				if(doAbort_IfLambdaInvocation_Fail(invokeRequest, renderArgs, true)) return true;
+				if(doAbort_IfLambdaInvocation_Fail(invokeRequest, true)) return true;
 			
 		}
 		logger.print("Succesfully Invoked Lambda Function For All Payloads With Mode [" + getInvokeRequest().getInvocationType() + "]");
 		
 		return false;
 	}
-	private boolean doAbort_IfLambdaMetricCollection_Fail(int memorySize, long startTime, long endTime, boolean firstAttemp) {
+	private boolean doAbort_IfCollectLambdaMetricFails(int memorySize, long startTime, long endTime, int attemptCounter) {
 		AmazonCloudWatch cloudWatchClient = factory.getAWSCloudWatchClient();
 		Date startDt = new Date(startTime);
 		Date endDt = new Date(endTime);
 		
-		String secondAttempMsg = firstAttemp ? "": "One More Attempt With New End Time-->";
+		String secondAttempMsg = attemptCounter == 1 ? "": "\tOne More Attempt With New End Time-->";
 		logger.print(secondAttempMsg + "Begin Collecting Metrics With Start Time [" + startDt + "] And End Time [" + endDt + "]");
 		
 		try { 
 			GetMetricDataRequest metricRequest = getMetricDataRequestForAverageResponse("m" + startTime, startDt, endDt);
 			GetMetricDataResult result = cloudWatchClient.getMetricData(metricRequest);
 			List<MetricDataResult> listResults = result.getMetricDataResults();
-			//logger.print("Metric AVG(Duration) Found [" + listResults + "]");
-			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0) {
-				if(firstAttemp)  {
-					logger.print("No Metric Found For AVG(Duration) During First Attempt. Waiting For Another 30 Seconds For Metrics To Be Available In CloudWatch");
+			
+			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0
+					|| listResults.get(0).getValues().get(0) < config.getNumberOfInvocationPerCycle()) {
+				logger.print("Not Enough Metric Data Point Found For AVG(Duration-ms) During [" + attemptCounter + "] Attempt. Metric Data Found--> " + listResults);
+				if(attemptCounter < 3)  {
+					logger.print("Waiting For Another 30 Seconds For Metrics To Be Available In CloudWatch");
 					sleep(30000);
-					return doAbort_IfLambdaMetricCollection_Fail(memorySize, startTime, System.currentTimeMillis(), false);
+					return doAbort_IfCollectLambdaMetricFails(memorySize, startTime, System.currentTimeMillis(), ++attemptCounter);
 				}
-				else {
-					logger.printAbortMessage("Aborting Operation-->No Metric Found For AVG(Duration) After Second Attempt");
-					return true;
-				}
+				else 
+					logger.printAbortMessage("Skpping Metric Data Collection For Memory [" + memorySize + "] Execution ");
+					return false;
 			}
 			
 			Double avgResponse = listResults.get(0).getValues().get(0);
-			Double invocations = 0.0d;
-			mapMemoryAndResponse.put(memorySize, avgResponse);
+			mapMemoryAndResponse.put(memorySize, round(avgResponse));
 			
 			metricRequest = getMetricDataRequestForNumInvocation("m" + endTime, startDt, endDt);
 			result = cloudWatchClient.getMetricData(metricRequest);
 			listResults = result.getMetricDataResults();
+			Double invocations = 0.0d;
 			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0) 
-				logger.print("No Metric Found For SUM(Invocations), Hence Could Not Determine Metric AVG(Duration) Data Points");
-			else {
+				logger.print("No Metric Found For SUM(Invocations), Hence Could Not Determine Metric AVG(Duration-ms) Data Points");
+			else 
 				invocations = listResults.get(0).getValues().get(0);
-				mapMemoryAndInvocations.put(memorySize, invocations);
-			}
-			
-			logger.print("For Memory [" + memorySize + "], AVG(Duration) = [" + avgResponse + "], SUM(Invocations) = [" + invocations + "]");
+				
+			mapMemoryAndInvocations.put(memorySize, round(invocations));
+			logger.print("For Memory [" + memorySize + "], AVG(Duration-ms) = [" + round(avgResponse) + "], SUM(Invocations) = [" + round(invocations) + "]");
 			
 		}catch(AmazonCloudWatchException exception ) {
 			logger.printAbortMessage("Aborting Operation-->AmazonCloudWatchException-->Collecting Metrics. Error [" + exception.getMessage() + "]");
 			return true;
 		}catch(Exception exception) {
-			logger.printAbortMessage("Aborting Operation-->AmazonCloudWatchException-->Collecting Metrics. Error [" + exception.getMessage() + "]");
+			logger.printAbortMessage("Aborting Operation-->General Exception-->Collecting Metrics. Error [" + exception.getMessage() + "]");
 			return true;
 		}
 		
 		return false;
 	}
-	private boolean doAbort_IfLambdaInvocation_Fail(InvokeRequest invokeRequest, int[] renderArgs, boolean checkErrorRate) {
+	private boolean doAbort_IfLambdaInvocation_Fail(InvokeRequest invokeRequest, boolean checkErrorRate) {
 		try {  InvokeResult invokeResult = factory.getAWSLambdaClient().invoke(invokeRequest);
 		
 			switch (InvocationType.fromValue(invokeRequest.getInvocationType())) {
@@ -323,7 +317,24 @@ public class AwsLdConCostCal {
 		}
 		return checkErrorRate ? hasErrorRateBreached() : false;
 	}
-	private boolean hasErrorRateBreached() { return failedInvocation/(passedInvocation+failedInvocation) > errorThreshold ?  true: false;
+	private boolean hasErrorRateBreached() { return failedInvocation/(passedInvocation+failedInvocation) > errorThreshold ?  true: false;}
+	private void printFinalSummary(){
+		if(mapMemoryAndResponse.size() == 0) return;
+		logger.beginNewSection("Begin Final Summary");
+		logger.printInSameLine("Memory-->\t\t||");
+		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet())
+			logger.printInSameLine("\t" + entry.getKey() + "\t|");
+		logger.print("");
+		logger.printInSameLine("Avg Response (ms)-->\t||");
+		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet())
+			logger.printInSameLine("\t" + entry.getValue() + "\t|");
+		logger.print("");
+		logger.printInSameLine("# Invocations-->\t||");
+		for(Map.Entry<Integer, Integer> entry: mapMemoryAndInvocations.entrySet())
+			logger.printInSameLine("\t" + entry.getValue() + "\t|");
+		logger.print("");
+		logger.endNewSection("End Final Summary");
+		
 	}
 	/************************************************HELP SECTION*******************************************************************************/
 	private static void executeHelpSection(String args[]) {
@@ -397,7 +408,7 @@ public class AwsLdConCostCal {
 		return invokeRequest = new InvokeRequest().withFunctionName(config.getLambdaFunctionConfig());
 	}
 	private void resetInvokeRequestWithRequestResponseInvocationType() {
-		invokeRequest = new InvokeRequest().withFunctionName(config.getLambdaFunctionConfig()).withInvocationType(InvocationType.RequestResponse);
+		invokeRequest = new InvokeRequest().withFunctionName(config.getLambdaFunctionConfig()).withInvocationType(config.getInvocationType());
 	}
 	private void resetInvokeRequestWithDryRunInvocationType() {
 		invokeRequest = new InvokeRequest().withFunctionName(config.getLambdaFunctionConfig()).withInvocationType(InvocationType.DryRun);
@@ -420,4 +431,5 @@ public class AwsLdConCostCal {
 		return new GetMetricDataRequest().withMetricDataQueries(getMetricDataQuery(id, "Invocations", "Sum")).withStartTime(startTime).withEndTime(endTime);
 	}
 	private int getPeriod() { return 60;}
+	private int round(double value) { return (int)Math.round(value);}
 }
