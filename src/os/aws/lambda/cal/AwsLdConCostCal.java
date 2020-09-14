@@ -54,6 +54,7 @@ public class AwsLdConCostCal {
 	private static Config config = Config.getConfig();
 	private AWSServiceFactory factory = AWSServiceFactory.getFactory();
 	private volatile float passedInvocation=0.0f, failedInvocation=0.0f, errorThreshold=0.02f;
+	private double metricAcceptanceThreshold = 0.5d;
 	
 	private InvokeRequest invokeRequest = null;
 	private UpdateFunctionConfigurationRequest updateConfigRequest = null;
@@ -66,10 +67,16 @@ public class AwsLdConCostCal {
 		try { start(args);}finally {logger.closeFile();}
 	}
 	private static void start(String []args) {
+		long startTime = System.currentTimeMillis();
 		startupMessage();
 		new AwsLdConCostCal().kickOff(args); 
+		long endTime = System.currentTimeMillis();
+		logger.beginNewSection("[" + name + "] Took Total Of [" + ( (endTime-startTime < 1000*60) ? ((endTime-startTime/1000)) + " Seconds " 
+				: ((endTime-startTime)/60000) +  " Mins & " + ((endTime-startTime)%60000) + " Seconds ") + "]");
+		logger.endNewSection("");
 	}
 	public void kickOff(String[] args) {
+		
 		args = Util.toLowerCase(args);
 		
 		switch(args.length) {
@@ -255,13 +262,13 @@ public class AwsLdConCostCal {
 		logger.print(secondAttempMsg + "Begin Collecting Metrics With Start Time [" + startDt + "] And End Time [" + endDt + "]");
 		
 		try { 
-			GetMetricDataRequest metricRequest = getMetricDataRequestForAverageResponse("m" + startTime, startDt, endDt);
+			GetMetricDataRequest metricRequest = getMetricDataRequestForNumInvocation("m" + startTime, startDt, endDt);
 			GetMetricDataResult result = cloudWatchClient.getMetricData(metricRequest);
 			List<MetricDataResult> listResults = result.getMetricDataResults();
 			
 			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0
-					|| listResults.get(0).getValues().get(0) < config.getNumberOfInvocationPerCycle()) {
-				logger.print("Not Enough Metric Data Point Found For AVG(Duration-ms) During [" + attemptCounter + "] Attempt. Metric Data Found--> " + listResults);
+					|| listResults.get(0).getValues().get(0) < (metricAcceptanceThreshold * config.getNumberOfInvocationPerCycle())) {
+				logger.print("Not Enough Metric Data Point Found For SUM(Invocations) During [" + attemptCounter + "] Attempt. Metric Data Found--> " + listResults);
 				if(attemptCounter < 3)  {
 					logger.print("Waiting For Another 30 Seconds For Metrics To Be Available In CloudWatch");
 					sleep(30000);
@@ -272,19 +279,19 @@ public class AwsLdConCostCal {
 					return false;
 			}
 			
-			Double avgResponse = listResults.get(0).getValues().get(0);
-			mapMemoryAndResponse.put(memorySize, round(avgResponse));
+			Double invocations = listResults.get(0).getValues().get(0);
+			mapMemoryAndInvocations.put(memorySize, round(invocations));
 			
-			metricRequest = getMetricDataRequestForNumInvocation("m" + endTime, startDt, endDt);
+			metricRequest = getMetricDataRequestForAverageResponse("m" + endTime, startDt, endDt);
 			result = cloudWatchClient.getMetricData(metricRequest);
 			listResults = result.getMetricDataResults();
-			Double invocations = 0.0d;
+			Double avgResponse = 0.0d;
 			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0) 
-				logger.print("No Metric Found For SUM(Invocations), Hence Could Not Determine Metric AVG(Duration-ms) Data Points");
+				logger.print("No Metric Found For AVG(Duration-ms), Hence Could Not Determine Metric AVG(Duration-ms) Data Points");
 			else 
-				invocations = listResults.get(0).getValues().get(0);
+				avgResponse = listResults.get(0).getValues().get(0);
 				
-			mapMemoryAndInvocations.put(memorySize, round(invocations));
+			mapMemoryAndResponse.put(memorySize, round(avgResponse));
 			logger.print("For Memory [" + memorySize + "], AVG(Duration-ms) = [" + round(avgResponse) + "], SUM(Invocations) = [" + round(invocations) + "]");
 			
 		}catch(AmazonCloudWatchException exception ) {
@@ -321,17 +328,18 @@ public class AwsLdConCostCal {
 	private void printFinalSummary(){
 		if(mapMemoryAndResponse.size() == 0) return;
 		logger.beginNewSection("Begin Final Summary");
-		logger.printInSameLine("Memory-->\t\t||");
-		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet())
-			logger.printInSameLine("\t" + entry.getKey() + "\t|");
+		String memory = "Memory-->\t\t||";
+		String avgResponse = "Avg Response (ms)-->\t||";
+		String invocation = "# Invocations-->\t||";
+		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet()) {
+			memory += "\t" + entry.getKey() + "\t|";
+			avgResponse += "\t" + entry.getValue() + "\t|";
+			invocation += "\t" + mapMemoryAndInvocations.get(entry.getKey()) + "\t|";
+		}
 		logger.print("");
-		logger.printInSameLine("Avg Response (ms)-->\t||");
-		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet())
-			logger.printInSameLine("\t" + entry.getValue() + "\t|");
-		logger.print("");
-		logger.printInSameLine("# Invocations-->\t||");
-		for(Map.Entry<Integer, Integer> entry: mapMemoryAndInvocations.entrySet())
-			logger.printInSameLine("\t" + entry.getValue() + "\t|");
+		logger.print(memory);
+		logger.print(avgResponse);
+		logger.print(invocation);
 		logger.print("");
 		logger.endNewSection("End Final Summary");
 		

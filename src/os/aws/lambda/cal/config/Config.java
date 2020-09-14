@@ -70,7 +70,7 @@ public class Config implements ConfigConstants {
 	public String getPayloadSpreadString() {return jsonPayLoad == null ? "" : jsonPayLoad.getPayloadSpreadString(getNumberOfInvocationPerCycle()); }
 	public String getPayloadBody(int index) { return jsonPayLoad == null ? null : (jsonPayLoad.getBody(index) == null ? null : jsonPayLoad.getBody(index).toJSONString());}
 	
-	public boolean isInvocationTypeSynchronous( ) { return mapBoolConfig.get(KEY_INVOCATION_TYPE); }
+	public boolean isInvocationTypeSynchronous( ) { return mapBoolConfig.get(KEY_SYNCH_INVOCATION_TYPE); }
 	public InvocationType getInvocationType( ) { return isInvocationTypeSynchronous() ? InvocationType.RequestResponse : InvocationType.Event;}
 	
 	public String getProxyHost() { return mapStringConfig.get(KEY_PROXY_HOST);}
@@ -108,7 +108,7 @@ public class Config implements ConfigConstants {
 		//Lambda Config
 		captureStringInput(scanner, KEY_LAMBDA_FUNCTION, LAMBDA_FUNCTION_MSG, ++inputCounter);
 		captureStringInput(scanner, KEY_AWS_REGION, AWS_REGION_MSG, ++inputCounter);
-		captureBooleanInput(scanner, KEY_INVOCATION_TYPE, INVOCATION_TYPE_MSG, ++inputCounter);
+		captureBooleanInput(scanner, KEY_SYNCH_INVOCATION_TYPE, INVOCATION_TYPE_MSG, ++inputCounter);
 		if (!captureIntInput(scanner, KEY_NUM_INVOCATION, NUM_INVOCATION_MSG,0, ++inputCounter)) return false;
 		//Special Handling For Memory Range
 		if (!captureMemoryRange(scanner, ++inputCounter)) return false;
@@ -234,7 +234,7 @@ public class Config implements ConfigConstants {
 		mapStringConfig.put(KEY_PROXY_HOST, DO_NOT_USE_VALUE);
 		
 		mapBoolConfig.put(KEY_LOG_MESSAGE, LOG_MESSAGE_DEFAULT_VALUE);
-		mapBoolConfig.put(KEY_INVOCATION_TYPE, INVOCATION_TYPE_DEFAULT);
+		mapBoolConfig.put(KEY_SYNCH_INVOCATION_TYPE, INVOCATION_TYPE_DEFAULT);
 		
 		//Populate Valid Value Memory List
 		if (listValidLambdaMemoryValues == null) {
@@ -307,8 +307,8 @@ public class Config implements ConfigConstants {
 		
 		obj = jsonObject.get(KEY_LOG_MESSAGE);
 		if(obj != null) mapBoolConfig.put(KEY_LOG_MESSAGE, Boolean.parseBoolean(obj.toString()));
-		obj = jsonObject.get(KEY_INVOCATION_TYPE);
-		if(obj != null) mapBoolConfig.put(KEY_INVOCATION_TYPE, Boolean.parseBoolean(obj.toString()));
+		obj = jsonObject.get(KEY_SYNCH_INVOCATION_TYPE);
+		if(obj != null) mapBoolConfig.put(KEY_SYNCH_INVOCATION_TYPE, Boolean.parseBoolean(obj.toString()));
 		 
 		obj = jsonObject.get(KEY_PROXY_HOST);
 		if (obj != null && !DO_NOT_USE_VALUE.equalsIgnoreCase(obj.toString())) {

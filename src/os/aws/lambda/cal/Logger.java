@@ -108,16 +108,6 @@ public class Logger {
 		printForwardSlashLine();
 		printBlankLine();
 	}
-	public void begingSection(String msg) {
-		listTabs.add("  ");
-		printAndWrite(msg);
-		
-	}
-	public void endSection(String msg) {
-		listTabs.clear();
-		printAndWrite(msg);
-		
-	}
 	private void printAndWrite(String msg) {
 		for(String str: listTabs) { 
 			System.out.print(str);
