@@ -4,6 +4,8 @@
 package os.aws.lambda.cal.util;
 
 import static os.aws.lambda.cal.config.ConfigConstants.CODE_ERROR_FORMATTING_VALUE;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_AVERAGE;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_SUM;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -12,15 +14,15 @@ import java.io.IOException;
 import java.io.Reader;
 import java.text.NumberFormat;
 import java.text.ParsePosition;
+import java.util.List;
 
-import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import com.amazonaws.services.cloudwatch.model.MetricDataResult;
+
 import os.aws.lambda.cal.Logger;
-import os.aws.lambda.cal.config.ConfigConstants;
-import os.aws.lambda.cal.modal.JsonPayload;
 
 /**
  * @author Brijesh Sharma
@@ -98,5 +100,30 @@ public class Util {
 		return null;
 	}
 	public static void close(Reader reader) {try { if (reader != null) reader.close();}catch(Exception e) {}}
+	
+	/*******************************************HANDLING AWS SDK OBJECTS******************************************************************************/
+	public static double getMetricsData(List<MetricDataResult> listResults, String stat) {
+		double returnValue = 0.0d;
+		if(listResults == null || listResults.size() == 0) return returnValue;
+		
+		int totalResultSize = 0;
+		for(int i=0; i<listResults.size(); i++) {
+			MetricDataResult nextResult = listResults.get(i);
+			if(nextResult == null) continue;
+			
+			List<Double> listValues = nextResult.getValues();
+			logger.print("  For Stat [" + stat + "], List Of Metrics Received Are-->" + listValues);
+			if(listValues ==null) continue;
+			
+			totalResultSize += listValues.size();
+			for(Double doubleValue: listValues)
+				returnValue += doubleValue;
+		}
+		
+		if (KEY_SUM.equalsIgnoreCase(stat)) return returnValue;
+		if (KEY_AVERAGE.equalsIgnoreCase(stat))	return returnValue/totalResultSize;
+		return 0.0d;
+	}
+	
 
 }

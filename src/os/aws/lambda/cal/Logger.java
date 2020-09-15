@@ -71,8 +71,8 @@ public class Logger {
 	public void endNewSubSection( ) { endNewSubSection("");}
 	public void endNewSubSection(String msg) {
 		if(listTabs.size() > 0) listTabs.remove(listTabs.size()-1);
-		printBlankLine();
 		print(msg);
+		printBlankLine();
 	}
 	public void print(String msg) {
 		printAndWrite(msg);

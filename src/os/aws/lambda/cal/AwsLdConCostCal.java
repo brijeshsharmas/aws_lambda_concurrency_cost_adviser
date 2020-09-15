@@ -19,12 +19,18 @@ import static os.aws.lambda.cal.config.ConfigConstants.ARGUMENT_HELP_VALIDATE;
 import static os.aws.lambda.cal.config.ConfigConstants.CONFIRMATION_CONTINUUE_MSG;
 import static os.aws.lambda.cal.config.ConfigConstants.CONFIRMATION_SAVE_CONFIGURATION_MSG;
 import static os.aws.lambda.cal.config.ConfigConstants.METRIC_COLLECTION_SLEEP_MSG;
+import static os.aws.lambda.cal.config.ConfigConstants.LAMBDA_PERMISSION_MSG;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_SUM;
+import static os.aws.lambda.cal.config.ConfigConstants.KEY_AVERAGE;
 
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
 import com.amazonaws.services.cloudwatch.model.AmazonCloudWatchException;
@@ -49,16 +55,20 @@ public class AwsLdConCostCal {
 	private static String name = "Lambda Concurrency & Cost Optimizer Tool";
 	private ConcurrentHashMap<Integer, Integer> mapMemoryAndResponse = new ConcurrentHashMap<Integer, Integer>();
 	private ConcurrentHashMap<Integer, Integer> mapMemoryAndInvocations = new ConcurrentHashMap<Integer, Integer>();
+	SimpleDateFormat  dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss z");
 	
 	private static Logger logger = Logger.getLogger();
 	private static Config config = Config.getConfig();
 	private AWSServiceFactory factory = AWSServiceFactory.getFactory();
 	private volatile float passedInvocation=0.0f, failedInvocation=0.0f, errorThreshold=0.02f;
-	private double metricAcceptanceThreshold = 0.5d;
+	private double numInvocationMetricAcceptanceThresholdPercentage = 0.75d;
 	
 	private InvokeRequest invokeRequest = null;
 	private UpdateFunctionConfigurationRequest updateConfigRequest = null;
 	private Dimension dimension = null;
+	
+	private int periodSeconds = 60;
+	private int waitPeriodSeconds = 60;
 
 	/***********************************************MAIN-METHOD********************************************************************************/
 	public static void main(String[] args) { 
@@ -70,12 +80,16 @@ public class AwsLdConCostCal {
 		long startTime = System.currentTimeMillis();
 		startupMessage();
 		new AwsLdConCostCal().kickOff(args); 
-		long endTime = System.currentTimeMillis();
-		logger.beginNewSection("[" + name + "] Took Total Of [" + ( (endTime-startTime < 1000*60) ? ((endTime-startTime/1000)) + " Seconds " 
-				: ((endTime-startTime)/60000) +  " Mins & " + ((endTime-startTime)%60000) + " Seconds ") + "]");
-		logger.endNewSection("");
+		long milliseconds = System.currentTimeMillis()-startTime;
+		long seconds = TimeUnit.MILLISECONDS.toSeconds(milliseconds);
+		logger.beginNewSection("[" + name + "] Execution Time Summary");
+		logger.endNewSection("  Ran For Total Of [" + ( seconds < 60 ? seconds + " Seconds " 
+				: seconds/60 +  " Mins & " + seconds%60 + " Seconds ") + "]");
+		
 	}
 	public void kickOff(String[] args) {
+		//Set Date Format To GMT
+		dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 		
 		args = Util.toLowerCase(args);
 		
@@ -128,7 +142,7 @@ public class AwsLdConCostCal {
 		
 		logger.beginNewSection("Begin Planned Execution Summary & Confirmation");
 		summarizeExecution();
-		if (!config.confirmYesNo(CONFIRMATION_CONTINUUE_MSG)) return;
+		if (!config.confirmYesNo(CONFIRMATION_CONTINUUE_MSG + LAMBDA_PERMISSION_MSG)) return;
 		logger.endNewSection("End Planned Execution Summary & Confirmation");
 		
 		executeScenarios();
@@ -138,8 +152,12 @@ public class AwsLdConCostCal {
 		
 		if(doAbort_IfPreliminaryTest_Fail()) return false;
 		
+		//Calculate #Invocation For Each Metric Collected Accepted As Valid
+		Double numInvocationMetricAcceptanceThresholdNumber = numInvocationMetricAcceptanceThresholdPercentage * config.getNumberOfInvocationPerCycle();
+		
 		//Reset passed, failed Counters And Begin Execution For each Memory Size Configuration
 		resetCounters();
+		int cycleCounter = 0;
 		for(int memorySize=config.getMinMemoryNumber(); memorySize<=config.getMaxMemoryNumber(); memorySize=memorySize+config.getIncrementMemoryNumber()) {
 			
 			logger.beginNewSection("Begin Execution For Memory [" + memorySize + "]");
@@ -147,16 +165,22 @@ public class AwsLdConCostCal {
 			//Update Lambda Memory Configuration
 			if(doAbort_IfUpdateMemoryAdjustment_Fail(memorySize)) return false;
 			
+			long nextSleepSeconds = 60-TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())%60;
+			long startTime = System.currentTimeMillis() + (nextSleepSeconds*1000);
+			if(nextSleepSeconds > 0) {
+				logger.print("Need To Wait For Another [" + nextSleepSeconds + "] Seconds Before Begining Next Execution At [" +  
+					formatToGMTDate(System.currentTimeMillis() + (nextSleepSeconds*1000))	+  "], To Avoid Time Overlapping For Metric Collection");
+				sleep(nextSleepSeconds*1100);
+			}
+			
 			//Reset Metric Collection Counter & Execute All Payloads
-			long startTime = System.currentTimeMillis();
-			if(doAbort_IfLambdaInvocation_AllPayloads_Fail()) return false;
+			if(doAbort_IfLambdaInvocation_AllPayloads_Fail(++cycleCounter)) return false;
 			logger.print(METRIC_COLLECTION_SLEEP_MSG);
-			sleepSeventySeconds();
-			long endTime = System.currentTimeMillis();
+			sleepNinetySeconds();
+			nextSleepSeconds = 60-TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())%60;
+			long endTime = System.currentTimeMillis()+ (nextSleepSeconds*1000);
 			
-			if(doAbort_IfCollectLambdaMetricFails(memorySize, startTime, endTime, 1)) return false;
-			
-			
+			if(doAbort_IfCollectLambdaMetricFails(memorySize, startTime, endTime, 1, numInvocationMetricAcceptanceThresholdNumber)) return false;
 			logger.endNewSection("Ended Execution For Memory [" + memorySize + "]");
 		}
 		
@@ -164,6 +188,7 @@ public class AwsLdConCostCal {
 		
 		return true;
 	}
+	private String formatToGMTDate(long millisecond) { return dateFormat.format(new Date(millisecond)); }
 	private boolean doAbort_IfPreliminaryTest_Fail() {
 		logger.beginNewSection("Running-->Lambda Function Preliminary Tests");
 		
@@ -174,7 +199,7 @@ public class AwsLdConCostCal {
 		
 		logger.print("Test-->Update Memory Configuration With Lowest Memory Configuration-->Set To [" + config.getMinMemoryNumber() + "]");
 		if (doAbort_IfUpdateMemoryAdjustment_Fail(config.getMinMemoryNumber())) return true;
-		logger.print("\tPassed-->Test-->Update Memory Configuration-->Set To 128");
+		logger.print("\tPassed-->Test-->Update Memory Configuration-->Set To [" + config.getMinMemoryNumber() + "]");
 		
 		if(config.getNumberOfPayloads() == 0) 
 			logger.print("Skiping Payload Tests As No Payload Specified In The Configuration");
@@ -230,7 +255,9 @@ public class AwsLdConCostCal {
 		
 		return false;
 	}
-	private boolean doAbort_IfLambdaInvocation_AllPayloads_Fail() {
+	private boolean doAbort_IfLambdaInvocation_AllPayloads_Fail(int cycle) {
+		long startTime = System.currentTimeMillis();
+		logger.beginNewSubSection("Cycle [" +  cycle + "]-->Begin Invoking Lambda Functions For All Payloads At [" + formatToGMTDate(startTime) + "]");
 		resetInvokeRequestWithRequestResponseInvocationType();
 		
 		int[] payloadSpread = config.getPayloadSpread();
@@ -249,50 +276,47 @@ public class AwsLdConCostCal {
 				if(doAbort_IfLambdaInvocation_Fail(invokeRequest, true)) return true;
 			
 		}
-		logger.print("Succesfully Invoked Lambda Function For All Payloads With Mode [" + getInvokeRequest().getInvocationType() + "]");
+		logger.endNewSubSection("Succesfully Completed Invoking Lambda Function For All Payloads With Mode [" + getInvokeRequest().getInvocationType() 
+				+ "] At [" + formatToGMTDate(System.currentTimeMillis()) + "]");
 		
 		return false;
 	}
-	private boolean doAbort_IfCollectLambdaMetricFails(int memorySize, long startTime, long endTime, int attemptCounter) {
+	private boolean doAbort_IfCollectLambdaMetricFails(int memorySize, long startTime, long endTime, int attemptCounter, Double numInvocationMetricAcceptanceThresholdNumber) {
 		AmazonCloudWatch cloudWatchClient = factory.getAWSCloudWatchClient();
-		Date startDt = new Date(startTime);
+		Date startDt =  new Date(startTime);
 		Date endDt = new Date(endTime);
 		
-		String secondAttempMsg = attemptCounter == 1 ? "": "\tOne More Attempt With New End Time-->";
-		logger.print(secondAttempMsg + "Begin Collecting Metrics With Start Time [" + startDt + "] And End Time [" + endDt + "]");
+		String secondAttempMsg = attemptCounter == 1 ? "": "\tAttempt Number [" + attemptCounter + "]-->";
+		logger.print(secondAttempMsg + "Begin Collecting Metrics With Start Time [" + dateFormat.format(startDt) + "] And End Time [" + dateFormat.format(endDt) + "]");
 		
 		try { 
 			GetMetricDataRequest metricRequest = getMetricDataRequestForNumInvocation("m" + startTime, startDt, endDt);
 			GetMetricDataResult result = cloudWatchClient.getMetricData(metricRequest);
 			List<MetricDataResult> listResults = result.getMetricDataResults();
 			
-			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0
-					|| listResults.get(0).getValues().get(0) < (metricAcceptanceThreshold * config.getNumberOfInvocationPerCycle())) {
-				logger.print("Not Enough Metric Data Point Found For SUM(Invocations) During [" + attemptCounter + "] Attempt. Metric Data Found--> " + listResults);
-				if(attemptCounter < 3)  {
-					logger.print("Waiting For Another 30 Seconds For Metrics To Be Available In CloudWatch");
-					sleep(30000);
-					return doAbort_IfCollectLambdaMetricFails(memorySize, startTime, System.currentTimeMillis(), ++attemptCounter);
+			Double invocations = Util.getMetricsData(listResults, KEY_SUM);
+			if( invocations < numInvocationMetricAcceptanceThresholdNumber) {
+				logger.print("Found #Invocation [" + invocations  + "] < #Accepted Threshold/Metric [" + numInvocationMetricAcceptanceThresholdNumber  +  "] During [" + attemptCounter + "] Attempt. Metric Data Found--> " + listResults);
+				if(attemptCounter < 5)  {
+					logger.print("Waiting For Another 60 Seconds For Metrics To Be Available In CloudWatch");
+					sleep(waitPeriodSeconds);
+					return doAbort_IfCollectLambdaMetricFails(memorySize, startTime, System.currentTimeMillis(), ++attemptCounter, numInvocationMetricAcceptanceThresholdNumber);
 				}
 				else 
-					logger.printAbortMessage("Skpping Metric Data Collection For Memory [" + memorySize + "] Execution ");
+					logger.printAbortMessage("Max Attempt Tried. Ignoring Metric Data Collection For Memory [" + memorySize + "] Execution");
 					return false;
 			}
-			
-			Double invocations = listResults.get(0).getValues().get(0);
-			mapMemoryAndInvocations.put(memorySize, round(invocations));
 			
 			metricRequest = getMetricDataRequestForAverageResponse("m" + endTime, startDt, endDt);
 			result = cloudWatchClient.getMetricData(metricRequest);
 			listResults = result.getMetricDataResults();
-			Double avgResponse = 0.0d;
-			if(listResults == null || listResults.size() == 0 || listResults.get(0).getValues() == null || listResults.get(0).getValues().size() == 0) 
-				logger.print("No Metric Found For AVG(Duration-ms), Hence Could Not Determine Metric AVG(Duration-ms) Data Points");
-			else 
-				avgResponse = listResults.get(0).getValues().get(0);
-				
-			mapMemoryAndResponse.put(memorySize, round(avgResponse));
-			logger.print("For Memory [" + memorySize + "], AVG(Duration-ms) = [" + round(avgResponse) + "], SUM(Invocations) = [" + round(invocations) + "]");
+			Double avgResponse = Util.getMetricsData(listResults, KEY_AVERAGE);
+			logger.print("For Memory [" + memorySize + "], AVG(Duration-ms) = [" + round(avgResponse) + "], SUM(Invocations) = [" + 
+					round(invocations) + "] And % Metric Data Available [" +  round(100*(invocations/config.getNumberOfInvocationPerCycle())) + "%]");
+			if(avgResponse > 0.0d) {
+				mapMemoryAndResponse.put(memorySize, round(avgResponse));
+				mapMemoryAndInvocations.put(memorySize, round(invocations));
+			} else logger.print("No Metric Found For AVG(Duration-ms), Hence Could Not Determine Metric AVG(Duration-ms) Data Points, Hence Ignoring Metric Data Collection For Memory [" + memorySize + "] Execution ");
 			
 		}catch(AmazonCloudWatchException exception ) {
 			logger.printAbortMessage("Aborting Operation-->AmazonCloudWatchException-->Collecting Metrics. Error [" + exception.getMessage() + "]");
@@ -331,15 +355,18 @@ public class AwsLdConCostCal {
 		String memory = "Memory-->\t\t||";
 		String avgResponse = "Avg Response (ms)-->\t||";
 		String invocation = "# Invocations-->\t||";
+		String percMetricDataAvailable = "% Metric Available-->\t||";
 		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet()) {
-			memory += "\t" + entry.getKey() + "\t|";
-			avgResponse += "\t" + entry.getValue() + "\t|";
-			invocation += "\t" + mapMemoryAndInvocations.get(entry.getKey()) + "\t|";
+			memory += "\t" + entry.getKey() + "\t";
+			avgResponse += "\t" + entry.getValue() + "\t";
+			invocation += "\t" + mapMemoryAndInvocations.get(entry.getKey()) + "\t";
+			percMetricDataAvailable += "\t" + round(100*(mapMemoryAndInvocations.get(entry.getKey())/ ((double)config.getNumberOfInvocationPerCycle()))) + "%\t";
 		}
 		logger.print("");
 		logger.print(memory);
 		logger.print(avgResponse);
 		logger.print(invocation);
+		logger.print(percMetricDataAvailable);
 		logger.print("");
 		logger.endNewSection("End Final Summary");
 		
@@ -389,8 +416,9 @@ public class AwsLdConCostCal {
 	private static void startupMessage() {
 		logger.printBlankLine();
 		logger.printForwardSlashLine();
-		logger.print("Started [" + name + "] Build Version At [" + buildVersion + "] At [" + new Date(System.currentTimeMillis())  + "]");
+		logger.print("Started [" + name + "], Build Version [" + buildVersion + "] At [" + new Date(System.currentTimeMillis())  + "]");
 		logger.print("For Help, Use " + ARGUMENT_HELP + ", Or For More Details, Visit https://tools.brijeshsharma.com");
+		logger.print("For Bug & Support, Please Send It To support@tools.brijeshsharma.com");
 		logger.printForwardSlashLine();
 		logger.printBlankLine();
 	}
@@ -408,7 +436,7 @@ public class AwsLdConCostCal {
 	
 	private void resetCounters() { passedInvocation = 0.0f; failedInvocation = 0.0f;}
 	private void sleep(long millisecond) { try {Thread.sleep(millisecond);}catch(Exception e) {}}
-	private void sleepSeventySeconds() { sleep(1000*70);}
+	private void sleepNinetySeconds() { sleep(1000*waitPeriodSeconds);}
 	
 	/*******************************************************BUILDER & GETTER METHODS**********************************************************************************/	
 	private InvokeRequest getInvokeRequest() {
@@ -438,6 +466,6 @@ public class AwsLdConCostCal {
 	private GetMetricDataRequest getMetricDataRequestForNumInvocation(String id, Date startTime, Date endTime) {
 		return new GetMetricDataRequest().withMetricDataQueries(getMetricDataQuery(id, "Invocations", "Sum")).withStartTime(startTime).withEndTime(endTime);
 	}
-	private int getPeriod() { return 60;}
+	private int getPeriod() { return periodSeconds;}
 	private int round(double value) { return (int)Math.round(value);}
 }

@@ -3,9 +3,6 @@
  */
 package os.aws.lambda.cal.modal;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
@@ -21,6 +18,7 @@ public class JsonPayload {
 	private JSONArray jsonArray = null;	
 	private String validationMessage = null;
 	
+	//TO-DO: Json body could be array, not JSON Object
 	
 	/****************************************BUILD METHODS*****************************************************/
 	protected JsonPayload(JSONArray jsonArray) { 

@@ -56,7 +56,9 @@ public class Config implements ConfigConstants {
 	public int getIntConfigValue(String key) { return mapIntConfig.get(key);	}
 	public boolean getBooleanConfigValue(String key) { return mapBoolConfig.get(key);	}
 	
-	public String getLambdaFunctionConfig() { return mapStringConfig.get(KEY_LAMBDA_FUNCTION);}
+	public boolean doEnableLogging() { return mapBoolConfig.get(KEY_LOG_MESSAGE);	}
+	
+	public String getLambdaFunctionConfig() { return mapStringConfig.get(KEY_LAMBDA_FUNCTION_NAME);}
 	
 	public int getMinMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 0, MIN_MAX_DELIMETER);}
 	public int getMaxMemoryNumber() {return Util.getIntValueByPosition(mapStringConfig.get(KEY_MIN_MAX_MEMORY), 1, MIN_MAX_DELIMETER);}
@@ -106,7 +108,7 @@ public class Config implements ConfigConstants {
 			if (!captureIntInput(scanner, KEY_PROXY_PORT, PROXY_PORT_MSG,0, ++inputCounter)) return false;
 		
 		//Lambda Config
-		captureStringInput(scanner, KEY_LAMBDA_FUNCTION, LAMBDA_FUNCTION_MSG, ++inputCounter);
+		captureStringInput(scanner, KEY_LAMBDA_FUNCTION_NAME, LAMBDA_FUNCTION_MSG, ++inputCounter);
 		captureStringInput(scanner, KEY_AWS_REGION, AWS_REGION_MSG, ++inputCounter);
 		captureBooleanInput(scanner, KEY_SYNCH_INVOCATION_TYPE, INVOCATION_TYPE_MSG, ++inputCounter);
 		if (!captureIntInput(scanner, KEY_NUM_INVOCATION, NUM_INVOCATION_MSG,0, ++inputCounter)) return false;
@@ -307,6 +309,8 @@ public class Config implements ConfigConstants {
 		
 		obj = jsonObject.get(KEY_LOG_MESSAGE);
 		if(obj != null) mapBoolConfig.put(KEY_LOG_MESSAGE, Boolean.parseBoolean(obj.toString()));
+		if(doEnableLogging()) logger.enableWriteToFile();
+		
 		obj = jsonObject.get(KEY_SYNCH_INVOCATION_TYPE);
 		if(obj != null) mapBoolConfig.put(KEY_SYNCH_INVOCATION_TYPE, Boolean.parseBoolean(obj.toString()));
 		 
@@ -321,11 +325,11 @@ public class Config implements ConfigConstants {
 			mapIntConfig.put(KEY_PROXY_PORT, Integer.parseInt(port.toString()));
 		}
 		
-		obj = jsonObject.get(KEY_LAMBDA_FUNCTION);
+		obj = jsonObject.get(KEY_LAMBDA_FUNCTION_NAME);
 		if (obj == null) {
-			logger.printAbortMessage("Aborting Operation-->Missing Mandatory Key [" + KEY_LAMBDA_FUNCTION + "] From Config File");
+			logger.printAbortMessage("Aborting Operation-->Missing Mandatory Key [" + KEY_LAMBDA_FUNCTION_NAME + "] From Config File");
 			return false;
-		} else mapStringConfig.put(KEY_LAMBDA_FUNCTION, obj.toString());
+		} else mapStringConfig.put(KEY_LAMBDA_FUNCTION_NAME, obj.toString());
 		obj = jsonObject.get(KEY_AWS_REGION);
 		if (obj == null) {
 			logger.printAbortMessage("Aborting Operation-->Missing Mandatory Key [" + KEY_AWS_REGION + "] From Config File");
