@@ -20,6 +20,11 @@ public interface ConfigConstants {
 	public static String MIN_MAX_DELIMETER="-";
 	public static String CONFIG_FILE_NAME = "config.json";
 	public static boolean INVOCATION_TYPE_DEFAULT = true;
+	public static String TIMEZONE_DEFAULT = "UTC";
+	public static int MAX_ATTEMPT_METRIC_COLLECTION_DEFAULT = 1;
+	public static int PERIOD_METRIC_COLLECTION_DEFAULT = 60;
+	public static int WAIT_INTERVAL_METRIC_COLLECTION_DEFAULT = 30;
+	public static double METRIC_ACCEPTANCE_THRESHOLD_PERCENTAGE_DEFAULT = 0.75d;
 	
 	//Keys
 	public static String KEY_AWS_ACCESS_KEY = "AWS_ACCESS_KEY";
@@ -61,7 +66,7 @@ public interface ConfigConstants {
 														"c) Min Must Less Than Or Equal To Max, Increment Must Of In Order 64 mb. Please Try Again";
 	public static String INVOCATION_TYPE_MSG = "Please Confim (true/false) If  Lambda Invocation Type Is SYNCHRONOUS, Enter false ASYNCHRONOUS";
 	public static String AWS_REGION_MSG = "Please Enter AWS Region (such as us-east-1, eu-west-1, etc) Of Your Lambda Function";
-	public static String METRIC_COLLECTION_SLEEP_MSG = "Going On Sleep For Sixty (60) Seconds To Ensure Lambda Publishes Metrics To CloudWatch";
+	public static String METRIC_COLLECTION_SLEEP_MSG = "Going On Sleep For (%s) Seconds To Ensure Lambda Publishes Metrics To CloudWatch";
 	public static String LAMBDA_PERMISSION_MSG = "\n  Please Make Sure That Referred IAM User/Role Has Following Permissions.\n  lambda:InvokeFunction, lambda:UpdateFunctionConfiguration, lambda:GetFunctionConfiguration, cloudwatch:GetMetricData";
 
 	//Help Keys

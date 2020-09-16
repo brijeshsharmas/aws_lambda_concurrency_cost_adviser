@@ -6,6 +6,7 @@ package os.aws.lambda.cal.util;
 import static os.aws.lambda.cal.config.ConfigConstants.CODE_ERROR_FORMATTING_VALUE;
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_AVERAGE;
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_SUM;
+import static os.aws.lambda.cal.config.ConfigConstants.TIMEZONE_DEFAULT;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -14,7 +15,12 @@ import java.io.IOException;
 import java.io.Reader;
 import java.text.NumberFormat;
 import java.text.ParsePosition;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -31,6 +37,12 @@ import os.aws.lambda.cal.Logger;
 public class Util {
 	
 	private static Logger logger = Logger.getLogger();
+	private static SimpleDateFormat  dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss z");
+	
+	static{
+		//Set Date Format To UTC
+		dateFormat.setTimeZone(TimeZone.getTimeZone(TIMEZONE_DEFAULT));
+	}
 
 	/*Position Start From Zero**/
 	public static int getIntValueByPosition(String text, int position, String delimiter) {
@@ -124,6 +136,37 @@ public class Util {
 		if (KEY_AVERAGE.equalsIgnoreCase(stat))	return returnValue/totalResultSize;
 		return 0.0d;
 	}
-	
+	public static String formatToUTCDate(long millisecond) { 
+		return dateFormat.format(new Date(millisecond)); 
+	}
 
+	public static long getSecondNearestToMinute(long millisecond) { return  60- (TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())%60); }
+	public static long getSecondNearestToMinute() { return  getSecondNearestToMinute(System.currentTimeMillis()); }
+	
+	public static long getMilliNearestToMinute() { return getMilliNearestToMinute(System.currentTimeMillis()); }
+	public static long getMilliNearestToMinute(long millisecond) { return  System.currentTimeMillis() + (1000 * getSecondNearestToMinute(millisecond)); }
+	
+	public static long convertSecondToMilli(long seconds) { return  1000*seconds; }
+	
+	public static long getLowestNumberedKey(Map<Long, Long> mapKeyValue) {
+		long returnValue = Long.MAX_VALUE;
+		for(Map.Entry<Long, Long> entry: mapKeyValue.entrySet()) 
+			returnValue = entry.getKey() < returnValue ? entry.getKey() : returnValue;
+		
+		return returnValue;
+	}
+	public static long getHighestNumberedValue(Map<Long, Long> mapKeyValue) {
+		long returnValue = Long.MIN_VALUE;
+		for(Map.Entry<Long, Long> entry: mapKeyValue.entrySet()) 
+			returnValue = entry.getValue() > returnValue ? entry.getValue() : returnValue;
+		
+		return returnValue;
+	}
+	public static Integer sumValue(Map<Integer, Integer> mapKeyValue) {
+		int returnValue = 0;
+		for(Map.Entry<Integer, Integer> entry: mapKeyValue.entrySet()) 
+			returnValue += entry.getValue();
+		
+		return returnValue;
+	}
 }
