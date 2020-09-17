@@ -28,9 +28,11 @@ import static os.aws.lambda.cal.config.ConfigConstants.WAIT_INTERVAL_METRIC_COLL
 import static os.aws.lambda.cal.config.ConfigConstants.METRIC_ACCEPTANCE_THRESHOLD_PERCENTAGE_DEFAULT;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
@@ -45,6 +47,8 @@ import com.amazonaws.services.cloudwatch.model.MetricDataResult;
 import com.amazonaws.services.cloudwatch.model.MetricStat;
 import com.amazonaws.services.lambda.AWSLambda;
 import com.amazonaws.services.lambda.model.AWSLambdaException;
+import com.amazonaws.services.lambda.model.GetFunctionConfigurationRequest;
+import com.amazonaws.services.lambda.model.GetFunctionConfigurationResult;
 import com.amazonaws.services.lambda.model.InvocationType;
 import com.amazonaws.services.lambda.model.InvokeRequest;
 import com.amazonaws.services.lambda.model.InvokeResult;
@@ -57,12 +61,13 @@ public class AwsLdConCostCal {
 	private static String name = "Lambda Concurrency & Cost Optimizer Tool";
 	private TreeMap<Integer, Integer> mapMemoryAndResponse = new TreeMap<Integer, Integer>();
 	private TreeMap<Integer, Integer> mapMemoryAndInvocations = new TreeMap<Integer, Integer>();
-	private TreeMap<Long, Long> mapTimeSeries = new TreeMap<Long, Long>();
+	private TreeMap<Integer, List<Long>> mapTimeSeries = new TreeMap<Integer, List<Long>>();
 	
 	private static Logger logger = Logger.getLogger();
 	private static Config config = Config.getConfig();
 	private AWSServiceFactory factory = AWSServiceFactory.getFactory();
 	private volatile float passedInvocation=0.0f, failedInvocation=0.0f, errorThreshold=0.02f;
+	private int functionOriginalMemorySize = 0;
 	
 	private InvokeRequest invokeRequest = null;
 	private UpdateFunctionConfigurationRequest updateConfigRequest = null;
@@ -87,6 +92,7 @@ public class AwsLdConCostCal {
 		
 	}
 	public void kickOff(String[] args) {
+		
 		args = Util.toLowerCase(args);
 		
 		switch(args.length) {
@@ -105,7 +111,7 @@ public class AwsLdConCostCal {
 			
 		}
 		
-		execute();	
+		execute();
 	}
 	
 	/***********************************************PREP-AND-VALIDATION********************************************************************************/
@@ -148,8 +154,19 @@ public class AwsLdConCostCal {
 		
 		executeScenarios();
 		
+		if(functionOriginalMemorySize > 0)  {
+			logger.beginNewSection("Begin - Reseting Function Memory To Original Function Memory [" + functionOriginalMemorySize + "]");
+			doAbort_IfUpdateMemoryAdjustment_Fail(functionOriginalMemorySize);
+			logger.endNewSection("End - Reseting Function Memory To Original Function Memory [" + functionOriginalMemorySize + "]");
+		}
+		
 	}
 	private boolean executeScenarios() {
+		
+		logger.beginNewSection("Begin - Getting Function Current Memory Configuration");
+		functionOriginalMemorySize = getFunctionMemoryconfig();
+		logger.endNewSection("Begin - Getting Function Current Memory Configuration");
+		if(functionOriginalMemorySize == -1) return false;
 		
 		if(doAbort_IfPreliminaryTest_Fail()) return false;
 		
@@ -196,7 +213,7 @@ public class AwsLdConCostCal {
 	}
 	private boolean doAbort_IfCollectLambdaMetricFails(int memorySize, long startTime, long endTime, 
 			Double numInvocationMetricAcceptanceThresholdNumber, Map<Integer, Integer> mapMemInvocation, Map<Integer, Integer> mapMemAvgResponse, 
-			Map<Long, Long> mapArgTimeSeries) {
+			Map<Integer, List<Long>> mapArgTimeSeries) {
 		AmazonCloudWatch cloudWatchClient = factory.getAWSCloudWatchClient();
 		Date startDt =  new Date(startTime);
 		
@@ -232,7 +249,7 @@ public class AwsLdConCostCal {
 				
 				if(mapMemAvgResponse != null) mapMemAvgResponse.put(memorySize, round(avgResponse));
 				if(mapMemInvocation != null) mapMemInvocation.put(memorySize, round(invocations));
-				if(mapArgTimeSeries != null) mapArgTimeSeries.put(startTime, endTime);
+				if(mapArgTimeSeries != null) mapArgTimeSeries.put(memorySize, Arrays.asList(startTime, endTime));
 				return false;
 				
 			}catch(AmazonCloudWatchException exception ) {
@@ -311,6 +328,24 @@ public class AwsLdConCostCal {
 		
 		return false;
 	}
+	/**To Execute This Operation, IAM User Must Have lambda:UpdateFunctionConfiguraton permission**/
+	private int getFunctionMemoryconfig() {
+		AWSLambda lambdaClient = factory.getAWSLambdaClient();
+		GetFunctionConfigurationRequest request = getFunctionConfigurationRequest();
+		
+		try { 
+			GetFunctionConfigurationResult result= lambdaClient.getFunctionConfiguration(request);
+			int memorySize = result.getMemorySize();
+			logger.print("Lambda Function Configuratio-->Memory Size--> [" + memorySize + "]");
+			return memorySize;
+		}catch(AWSLambdaException exception ) {
+			logger.printAbortMessage("Aborting Operation-->AWSLambdaException-->Execute Get Function Configuration. Error [" + exception.getMessage() + "]");
+			return -1;
+		}catch(Exception exception) {
+			logger.printAbortMessage("Aborting Operation-->GeneralException-->Execute Get Function Configuration. Error [" + exception.getMessage() + "]");
+			return -1;
+		}
+	}
 	private boolean doAbort_IfLambdaInvocation_AllPayloads_Fail(int cycle) {
 		long startTime = System.currentTimeMillis();
 		logger.beginNewSubSection("Cycle [" +  cycle + "]-->Begin Invoking Lambda Functions For All Payloads At Current Time [" + Util.formatToUTCDate(startTime) + "]");
@@ -363,14 +398,15 @@ public class AwsLdConCostCal {
 	private void reComputeIfNecessary(){
 		logger.beginNewSection("Begin Reconciling & Recomputing If Necessary");
 		
-		logger.beginNewSection("Metric Collection Time-Series");
-		logger.print("Start Period \t\t\tEnd Period");
-		for(Map.Entry<Long, Long> entry: mapTimeSeries.entrySet())
-			logger.print(Util.formatToUTCDate(entry.getKey()) + "\t\t" + Util.formatToUTCDate(entry.getValue()));
-		logger.endNewSection();
+		logger.beginNewSubSection("*****************Metric Collection Time-Series********************");
+		logger.print("Memory\t\t\tStart Period\t\t\t\tEnd Period");
+		for(Map.Entry<Integer, List<Long>> entry: mapTimeSeries.entrySet()) 
+			logger.print(entry.getKey() + "\t\t\t" + Util.formatToUTCDate(entry.getValue().get(0)) + "\t\t" +  Util.formatToUTCDate(entry.getValue().get(1)));
 		
-		long startTime = Util.getLowestNumberedKey(mapTimeSeries);
-		long endTime = Util.getHighestNumberedValue(mapTimeSeries);
+		logger.endNewSubSection();
+		
+		long startTime = Util.getLowestTimeSeries(mapTimeSeries);
+		long endTime = Util.getHighestTimeSeries(mapTimeSeries);
 		logger.print("Begin Collecting Metric For Entire Duration--> Start Time [" + Util.formatToUTCDate(startTime) + 
 				"], End Time [" + Util.formatToUTCDate(endTime) + "]");
 		
@@ -380,16 +416,48 @@ public class AwsLdConCostCal {
 		
 		if(invocations != existingInvocation) {
 			logger.print("Old #Invocation [" + existingInvocation + "] Do Not Match With Current #Invocation [" + invocations + "], Hence Recomputing");
+			reCompute();
 		} else 
 			logger.print("Old #Invocation [" + existingInvocation + "] Match With Current #Invocation [" + invocations + "], Hence Skipping Recomputing");
 			
 		logger.endNewSection("End Reconciling & Recomputing If Necessary");
 	}
-	
+	private void reCompute() {
+		logger.beginNewSubSection("Begin ReComputing Metric");
+		
+		for(Map.Entry<Integer, Integer> entry: mapMemoryAndInvocations.entrySet()) {
+			if(entry.getValue() == config.getNumberOfInvocationPerCycle()) continue;
+			
+			List<Long> listSeries = mapTimeSeries.get(entry.getKey());
+			if(listSeries == null || listSeries.size() != 2) {
+				logger.printAbortMessage("Internal Error. Please Report Bug With Subject Message [Missing TimeSeries For A Given Memory Size]");
+				continue;
+			}
+			
+			long startTime = listSeries.get(0);
+			long endTime = listSeries.get(1);
+			logger.print("Begin Collecting Metrics Again For Memory [" + entry.getKey() + "], And Time Series Start[" + 
+					Util.formatToUTCDate(startTime) + "], End[" +  Util.formatToUTCDate(endTime) + "]");
+			
+			List<MetricDataResult> listResults = getMetricData(KEY_SUM, startTime, endTime);
+			Double invocations = Util.getMetricsData(listResults, KEY_SUM);
+			mapMemoryAndInvocations.put(entry.getKey(), round(invocations));
+			listResults = getMetricData(KEY_AVERAGE, startTime, endTime);
+			Double response = Util.getMetricsData(listResults, KEY_AVERAGE);
+			mapMemoryAndResponse.put(entry.getKey(), round(response));
+			logger.print("Metrics Reset For For Memory [" + entry.getKey() + "] As SUM(Invocation)[" + round(invocations) 
+				+ "], AVG(Response)[" +  round(response)  + "]");
+		}
+		
+		logger.endNewSubSection("End ReComputing Metric");
+		
+	}
 	private List<MetricDataResult> getMetricData(String stat, long startTime, long endTime) {
 		AmazonCloudWatch cloudWatchClient = factory.getAWSCloudWatchClient();
 		try { 
-			GetMetricDataRequest metricRequest = getMetricDataRequestForNumInvocation("m" + endTime, new Date(startTime), new Date(endTime));
+			GetMetricDataRequest metricRequest = null;
+			if (stat.equalsIgnoreCase(KEY_SUM)) metricRequest = getMetricDataRequestForNumInvocation("m" + endTime, new Date(startTime), new Date(endTime));
+			else metricRequest = getMetricDataRequestForAverageResponse("m" + endTime, new Date(startTime), new Date(endTime));
 			GetMetricDataResult result = cloudWatchClient.getMetricData(metricRequest);
 			return result.getMetricDataResults();
 		}catch(Exception exception) {
@@ -406,20 +474,48 @@ public class AwsLdConCostCal {
 		String avgResponse = "Avg Response (ms)-->\t||";
 		String invocation = "# Invocations-->\t||";
 		String percMetricDataAvailable = "% Metric Available-->\t||";
+		String costVariation = "% Var Cost-->\t\t||";
+		String memVariation = "% Var Memory-->\t||";
+		String avgResponseVariation = "% Var Avg-Res-->\t||";
+		double baseCost = 1.0d, baseResponse = 1.0;
 		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet()) {
 			memory += "\t" + entry.getKey() + "\t";
 			avgResponse += "\t" + entry.getValue() + "\t";
 			invocation += "\t" + mapMemoryAndInvocations.get(entry.getKey()) + "\t";
 			percMetricDataAvailable += "\t" + round(100*(mapMemoryAndInvocations.get(entry.getKey())/ ((double)config.getNumberOfInvocationPerCycle()))) + "%\t";
+			if(entry.getKey() == config.getMinMemoryNumber()) {
+				costVariation += "\t(Base)\t";
+				memVariation += "\t(Base)\t";
+				avgResponseVariation += "\t(Base)\t";
+				baseCost = entry.getKey() * entry.getValue();
+				baseResponse = entry.getValue();
+			} else {
+				double cost = entry.getKey() * Util.nearestHunread(entry.getValue());
+				costVariation += "\t" + round((100*((cost-baseCost)/baseCost))) + "%\t";
+				memVariation += "\t" + round((100*((entry.getKey()-config.getMinMemoryNumber())/config.getMinMemoryNumber()))) + "%\t";
+				avgResponseVariation += "\t" + round((100*((entry.getValue()-baseResponse)/baseResponse))) + "%\t";
+			}
 		}
 		logger.print("");
 		logger.print(memory);
 		logger.print(avgResponse);
 		logger.print(invocation);
 		logger.print(percMetricDataAvailable);
+		logger.printMinusLine();
+		logger.print(memVariation);
+		logger.print(avgResponseVariation);
+		logger.print(costVariation);
 		logger.print("");
 		logger.endNewSection("End Final Summary");
 		
+	}
+	private void dummySet() {
+		Random random = new Random();
+		for (int i=128; i < 1280; i=i+128) {
+			mapMemoryAndInvocations.put(i, random.nextInt(100));
+			mapMemoryAndResponse.put(i, random.nextInt(2500));
+			mapTimeSeries.put(i, Arrays.asList(System.currentTimeMillis(), System.currentTimeMillis()));
+		}
 	}
 	/************************************************HELP SECTION*******************************************************************************/
 	private static void executeHelpSection(String args[]) {
@@ -468,7 +564,7 @@ public class AwsLdConCostCal {
 		logger.printForwardSlashLine();
 		logger.print("Started [" + name + "], Build Version [" + buildVersion + "] At [" + new Date(System.currentTimeMillis())  + "]");
 		logger.print("For Help, Use " + ARGUMENT_HELP + ", Or For More Details, Visit https://tools.brijeshsharma.com");
-		logger.print("For Bug & Support, Please Send It To support@tools.brijeshsharma.com");
+		logger.print("For Bug & Support, Please Send It To tools-support@brijeshsharma.com");
 		logger.printForwardSlashLine();
 		logger.printBlankLine();
 	}
@@ -501,6 +597,9 @@ public class AwsLdConCostCal {
 	private UpdateFunctionConfigurationRequest getUpdateMemoryAdjustmentRequest() {
 		if (updateConfigRequest != null) return updateConfigRequest;
 		return updateConfigRequest = new UpdateFunctionConfigurationRequest().withFunctionName(config.getLambdaFunctionConfig());
+	}
+	private GetFunctionConfigurationRequest getFunctionConfigurationRequest() {
+		return new GetFunctionConfigurationRequest().withFunctionName(config.getLambdaFunctionConfig());
 	}
 	private Dimension getDimension() {
 		if(dimension != null) return dimension;

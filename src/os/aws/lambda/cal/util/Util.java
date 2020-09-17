@@ -148,17 +148,21 @@ public class Util {
 	
 	public static long convertSecondToMilli(long seconds) { return  1000*seconds; }
 	
-	public static long getLowestNumberedKey(Map<Long, Long> mapKeyValue) {
+	public static long getLowestTimeSeries(Map<Integer, List<Long>> mapKeyValue) {
 		long returnValue = Long.MAX_VALUE;
-		for(Map.Entry<Long, Long> entry: mapKeyValue.entrySet()) 
-			returnValue = entry.getKey() < returnValue ? entry.getKey() : returnValue;
+		for(Map.Entry<Integer, List<Long>> entry: mapKeyValue.entrySet()) {
+			for(Long longValue: entry.getValue())
+				returnValue = longValue < returnValue ? longValue : returnValue;
+		}
 		
 		return returnValue;
 	}
-	public static long getHighestNumberedValue(Map<Long, Long> mapKeyValue) {
+	public static long getHighestTimeSeries(Map<Integer, List<Long>> mapKeyValue) {
 		long returnValue = Long.MIN_VALUE;
-		for(Map.Entry<Long, Long> entry: mapKeyValue.entrySet()) 
-			returnValue = entry.getValue() > returnValue ? entry.getValue() : returnValue;
+		for(Map.Entry<Integer, List<Long>> entry: mapKeyValue.entrySet()) {
+			for(Long longValue: entry.getValue())
+				returnValue = longValue > returnValue ? longValue : returnValue;
+		}
 		
 		return returnValue;
 	}
@@ -169,4 +173,5 @@ public class Util {
 		
 		return returnValue;
 	}
+	public static int nearestHunread(int num) { return num%100 > 0 ? ((num/100)*100)+100 : num;}
 }
