@@ -34,6 +34,11 @@ public class JsonPayload {
 			return false;
 		}
 		for (int i=0; i < jsonArray.size(); i++) {
+			if (! (jsonArray.get(i) instanceof JSONObject)) {
+				validationMessage = "Element Number [" + i + "] Is An Array Element, Which Is Currently Not Supported. Please Change It To Json Object";
+				return false;	
+			}
+			
 			JSONObject object = (JSONObject)jsonArray.get(i);
 			if(!object.containsKey(KEY_BODY)) {
 				validationMessage = "Element Number [" + i + "] Does Not Contain Key [" + KEY_BODY + "]";

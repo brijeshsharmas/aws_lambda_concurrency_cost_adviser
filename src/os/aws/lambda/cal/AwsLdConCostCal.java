@@ -28,6 +28,7 @@ import static os.aws.lambda.cal.config.ConfigConstants.WAIT_INTERVAL_METRIC_COLL
 import static os.aws.lambda.cal.config.ConfigConstants.METRIC_ACCEPTANCE_THRESHOLD_PERCENTAGE_DEFAULT;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -401,7 +402,7 @@ public class AwsLdConCostCal {
 		logger.beginNewSubSection("*****************Metric Collection Time-Series********************");
 		logger.print("Memory\t\t\tStart Period\t\t\t\tEnd Period");
 		for(Map.Entry<Integer, List<Long>> entry: mapTimeSeries.entrySet()) 
-			logger.print(entry.getKey() + "\t\t\t" + Util.formatToUTCDate(entry.getValue().get(0)) + "\t\t" +  Util.formatToUTCDate(entry.getValue().get(1)));
+			logger.print(entry.getKey() + " " + "\t\t\t" + Util.formatToUTCDate(entry.getValue().get(0)) + "\t\t" +  Util.formatToUTCDate(entry.getValue().get(1)));
 		
 		logger.endNewSubSection();
 		
@@ -477,6 +478,7 @@ public class AwsLdConCostCal {
 		String costVariation = "% Var Cost-->\t\t||";
 		String memVariation = "% Var Memory-->\t||";
 		String avgResponseVariation = "% Var Avg-Res-->\t||";
+		double tenMil = 1.0d;
 		double baseCost = 1.0d, baseResponse = 1.0;
 		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet()) {
 			memory += "\t" + entry.getKey() + "\t";
@@ -487,10 +489,11 @@ public class AwsLdConCostCal {
 				costVariation += "\t(Base)\t";
 				memVariation += "\t(Base)\t";
 				avgResponseVariation += "\t(Base)\t";
-				baseCost = entry.getKey() * entry.getValue();
+				baseCost = entry.getKey() * Util.nearestHunread(entry.getValue());
+				baseCost = baseCost / 1024 * tenMil;
 				baseResponse = entry.getValue();
 			} else {
-				double cost = entry.getKey() * Util.nearestHunread(entry.getValue());
+				double cost = tenMil * ((double)(entry.getKey() * Util.nearestHunread(entry.getValue())))/1024;
 				costVariation += "\t" + round((100*((cost-baseCost)/baseCost))) + "%\t";
 				memVariation += "\t" + round((100*((entry.getKey()-config.getMinMemoryNumber())/config.getMinMemoryNumber()))) + "%\t";
 				avgResponseVariation += "\t" + round((100*((entry.getValue()-baseResponse)/baseResponse))) + "%\t";
@@ -511,9 +514,24 @@ public class AwsLdConCostCal {
 	}
 	private void dummySet() {
 		Random random = new Random();
-		for (int i=128; i < 1280; i=i+128) {
+		List<Integer> listResponse = new ArrayList<Integer>();
+		listResponse.add(2748);
+		listResponse.add(1376);
+		listResponse.add(920);
+		listResponse.add(693);
+		listResponse.add(548);
+		listResponse.add(449);
+		listResponse.add(392);
+		listResponse.add(338);
+		listResponse.add(307);
+		listResponse.add(271);
+		listResponse.add(2748);
+		listResponse.add(2748);
+		
+		int j=0;
+		for (int i=128; i <= 1280; i=i+128) {
 			mapMemoryAndInvocations.put(i, random.nextInt(100));
-			mapMemoryAndResponse.put(i, random.nextInt(2500));
+			mapMemoryAndResponse.put(i, listResponse.get(j++));
 			mapTimeSeries.put(i, Arrays.asList(System.currentTimeMillis(), System.currentTimeMillis()));
 		}
 	}
