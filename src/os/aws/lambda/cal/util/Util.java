@@ -28,7 +28,7 @@ import org.json.simple.parser.ParseException;
 
 import com.amazonaws.services.cloudwatch.model.MetricDataResult;
 
-import os.aws.lambda.cal.Logger;
+import os.aws.lambda.cal.service.Logger;
 
 /**
  * @author Brijesh Sharma

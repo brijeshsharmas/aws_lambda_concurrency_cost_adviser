@@ -19,8 +19,8 @@ import org.json.simple.parser.ParseException;
 
 import com.amazonaws.services.lambda.model.InvocationType;
 
-import os.aws.lambda.cal.Logger;
 import os.aws.lambda.cal.modal.JsonPayload;
+import os.aws.lambda.cal.service.Logger;
 import os.aws.lambda.cal.util.Util;
 
 /**

@@ -8,6 +8,7 @@ package os.aws.lambda.cal;
 import os.aws.lambda.cal.config.Config;
 import os.aws.lambda.cal.modal.JsonPayload;
 import os.aws.lambda.cal.service.AWSServiceFactory;
+import os.aws.lambda.cal.service.Logger;
 import os.aws.lambda.cal.util.Util;
 
 import static os.aws.lambda.cal.config.ConfigConstants.KEY_MIN_MAX_MEMORY;
@@ -56,7 +57,7 @@ import com.amazonaws.services.lambda.model.InvokeResult;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
 
 
-public class AwsLdConCostCal {
+public class LambdaCalculator {
 	
 	private static String buildVersion = "1.0";
 	private static String name = "Lambda Concurrency & Cost Optimizer Tool";
@@ -84,7 +85,7 @@ public class AwsLdConCostCal {
 	private static void start(String []args) {
 		long startTime = System.currentTimeMillis();
 		startupMessage();
-		new AwsLdConCostCal().kickOff(args); 
+		new LambdaCalculator().kickOff(args); 
 		long milliseconds = System.currentTimeMillis()-startTime;
 		long seconds = TimeUnit.MILLISECONDS.toSeconds(milliseconds);
 		logger.beginNewSection("[" + name + "] Execution Time Summary");
