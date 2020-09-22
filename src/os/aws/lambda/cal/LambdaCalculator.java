@@ -350,26 +350,31 @@ public class LambdaCalculator {
 	}
 	private boolean doAbort_IfLambdaInvocation_AllPayloads_Fail(int cycle) {
 		long startTime = System.currentTimeMillis();
-		logger.beginNewSubSection("Cycle [" +  cycle + "]-->Begin Invoking Lambda Functions For All Payloads At Current Time [" + Util.formatToUTCDate(startTime) + "]");
+		logger.beginNewSubSection("Cycle [" +  cycle + "]-->Begin Invoking Lambda Functions " +  (config.getNumberOfPayloads() == 0 ? "Without Any Payload" : "For All Payloads") 
+				+  " At Current Time [" + Util.formatToUTCDate(startTime) + "]");
 		resetInvokeRequestWithRequestResponseInvocationType();
 		
 		int[] payloadSpread = config.getPayloadSpread();
 		for(int payloadCounter=0; payloadCounter <payloadSpread.length; payloadCounter++) {
 			if(payloadSpread[payloadCounter] == 0) continue;
-			logger.print("\tBegin Invoking Lambda Function For Payload [" + payloadCounter + "], Total Execution Planned [" + payloadSpread[payloadCounter] + 
-					"] With Mode [" + getInvokeRequest().getInvocationType() + "]");
+			logger.print("\tBegin Invoking Lambda Function" +   (config.getNumberOfPayloads() == 0 ? "" : " For Payload [" + payloadCounter + "]" )
+					+ ", Total Execution Planned [" + payloadSpread[payloadCounter] +  "] With Mode [" + getInvokeRequest().getInvocationType() + "]");
 			
-			String payloadBody = config.getPayloadBody(payloadCounter);
-			if(payloadBody == null) {
-				logger.printAbortMessage("Aborting Operation-->Internal Error-->No Body Found For Payload Number [" + payloadCounter + "] From Payload Json File");
-				return false;
-			}
-			getInvokeRequest().withPayload(ByteBuffer.wrap(payloadBody.getBytes()));
+			if(config.getNumberOfPayloads() > 0) {
+				String payloadBody = config.getPayloadBody(payloadCounter);
+				if(payloadBody == null) {
+					logger.printAbortMessage("Aborting Operation-->Internal Error-->No Body Found For Payload Number [" + payloadCounter + "] From Payload Json File");
+					return false;
+				}
+				getInvokeRequest().withPayload(ByteBuffer.wrap(payloadBody.getBytes()));
+			} 
+			
 			for(int i=0; i<payloadSpread[payloadCounter]; i++)
 				if(doAbort_IfLambdaInvocation_Fail(invokeRequest, true)) return true;
 			
 		}
-		logger.endNewSubSection("Succesfully Completed Invoking Lambda Function For All Payloads With Mode [" + getInvokeRequest().getInvocationType() 
+		logger.endNewSubSection("Succesfully Completed Invoking Lambda Function "  +  (config.getNumberOfPayloads() == 0 ? "Without Any Payload" : "For All Payloads") 
+				+     " With Mode [" + getInvokeRequest().getInvocationType() 
 				+ "] At [" + Util.formatToUTCDate(System.currentTimeMillis()) + "]");
 		
 		return false;
@@ -471,6 +476,7 @@ public class LambdaCalculator {
 	
 	private void printFinalSummary(){
 		if(mapMemoryAndResponse.size() == 0) return;
+		
 		logger.beginNewSection("Begin Final Summary");
 		String memory = "Memory-->\t\t||";
 		String avgResponse = "Avg Response (ms)-->\t||";
@@ -479,25 +485,38 @@ public class LambdaCalculator {
 		String costVariation = "% Var Cost-->\t\t||";
 		String memVariation = "% Var Memory-->\t||";
 		String avgResponseVariation = "% Var Avg-Res-->\t||";
-		double tenMil = 1.0d;
+		
+		int intNumCycles = config.getNumberOfInvocationPerCycle();
+		int intMinMemory = config.getMinMemoryNumber();
+		double dbNumCycles = intNumCycles;
+		double dbMinMmory = intMinMemory;
 		double baseCost = 1.0d, baseResponse = 1.0;
+		
 		for(Map.Entry<Integer, Integer> entry: mapMemoryAndResponse.entrySet()) {
-			memory += "\t" + entry.getKey() + "\t";
-			avgResponse += "\t" + entry.getValue() + "\t";
-			invocation += "\t" + mapMemoryAndInvocations.get(entry.getKey()) + "\t";
-			percMetricDataAvailable += "\t" + round(100*(mapMemoryAndInvocations.get(entry.getKey())/ ((double)config.getNumberOfInvocationPerCycle()))) + "%\t";
-			if(entry.getKey() == config.getMinMemoryNumber()) {
+			int intNextMemory = entry.getKey();
+			int intNextResponse = entry.getValue();
+			int intNextInvocation = mapMemoryAndInvocations.get(intNextMemory);
+			double dbNextMemory = intNextMemory;
+			double dbNextResponse = intNextResponse;
+			double dbNextInvocation = intNextInvocation;
+			
+			memory += "\t" + intNextMemory + "\t";
+			avgResponse += "\t" + intNextResponse + "\t";
+			invocation += "\t" + intNextInvocation + "\t";
+			percMetricDataAvailable += "\t" + round(100*(dbNextInvocation/dbNumCycles)) + "%\t";
+			
+			if(intNextMemory == intMinMemory) {
 				costVariation += "\t(Base)\t";
 				memVariation += "\t(Base)\t";
 				avgResponseVariation += "\t(Base)\t";
-				baseCost = entry.getKey() * Util.nearestHunread(entry.getValue());
-				baseCost = baseCost / 1024 * tenMil;
-				baseResponse = entry.getValue();
+				baseCost = dbNumCycles*dbNextMemory/1024*Util.nearestHunread(intNextResponse)/1000;
+				//baseCost = baseCost / 1024 * tenMil;
+				baseResponse = dbNextResponse;
 			} else {
-				double cost = tenMil * ((double)(entry.getKey() * Util.nearestHunread(entry.getValue())))/1024;
+				double cost = dbNumCycles*dbNextMemory/1024*Util.nearestHunread(intNextResponse)/1000;
 				costVariation += "\t" + round((100*((cost-baseCost)/baseCost))) + "%\t";
-				memVariation += "\t" + round((100*((entry.getKey()-config.getMinMemoryNumber())/config.getMinMemoryNumber()))) + "%\t";
-				avgResponseVariation += "\t" + round((100*((entry.getValue()-baseResponse)/baseResponse))) + "%\t";
+				memVariation += "\t" + round((100*((dbNextMemory-dbMinMmory)/dbMinMmory))) + "%\t";
+				avgResponseVariation += "\t" + round((100*((dbNextResponse-baseResponse)/baseResponse))) + "%\t";
 			}
 		}
 		logger.print("");
@@ -516,6 +535,8 @@ public class LambdaCalculator {
 	private void dummySet() {
 		Random random = new Random();
 		List<Integer> listResponse = new ArrayList<Integer>();
+		
+		/*Dummy Set For CPU Intensive 128-128-128
 		listResponse.add(2748);
 		listResponse.add(1376);
 		listResponse.add(920);
@@ -525,12 +546,23 @@ public class LambdaCalculator {
 		listResponse.add(392);
 		listResponse.add(338);
 		listResponse.add(307);
-		listResponse.add(271);
-		listResponse.add(2748);
-		listResponse.add(2748);
+		listResponse.add(271);*/
+		
+		
+		/*Dummy Set For CPU Intensive 128-128-128*/
+		listResponse.add(270);
+		listResponse.add(249);
+		listResponse.add(234);
+		listResponse.add(220);
+		listResponse.add(199);
+		listResponse.add(200);
+		listResponse.add(202);
+		listResponse.add(203);
+		listResponse.add(199);
+		listResponse.add(202);/**/
 		
 		int j=0;
-		for (int i=128; i <= 1280; i=i+128) {
+		for (int i=1280; i <= 2432; i=i+128) {
 			mapMemoryAndInvocations.put(i, random.nextInt(100));
 			mapMemoryAndResponse.put(i, listResponse.get(j++));
 			mapTimeSeries.put(i, Arrays.asList(System.currentTimeMillis(), System.currentTimeMillis()));

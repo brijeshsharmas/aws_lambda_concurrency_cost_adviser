@@ -68,7 +68,7 @@ public class Config implements ConfigConstants {
 	public int getNumberOfMemoryAdjustmentCycles() { return 1 + (getMaxMemoryNumber()-getMinMemoryNumber()) / getIncrementMemoryNumber();}
 	
 	public int getNumberOfPayloads() { return jsonPayLoad == null ? 0: jsonPayLoad.getNumberOfPayloads();}
-	public int[] getPayloadSpread() { return jsonPayLoad == null ? new int[0] : jsonPayLoad.getPayloadSpread(getNumberOfInvocationPerCycle());}
+	public int[] getPayloadSpread() { return jsonPayLoad == null ? new int[] {getNumberOfInvocationPerCycle()} : jsonPayLoad.getPayloadSpread(getNumberOfInvocationPerCycle());}
 	public String getPayloadSpreadString() {return jsonPayLoad == null ? "" : jsonPayLoad.getPayloadSpreadString(getNumberOfInvocationPerCycle()); }
 	public String getPayloadBody(int index) { return jsonPayLoad == null ? null : (jsonPayLoad.getBody(index) == null ? null : jsonPayLoad.getBody(index).toJSONString());}
 	
