@@ -1,5 +1,8 @@
 /**
- * 
+ * @author Brijesh Sharma
+ * Copyright (c) <year>, <copyright holder> 
+ * All rights reserved.
+ * This source code is licensed under the MIT license found in the LICENSE file in the root directory of this source tree. 
  */
 package os.aws.lambda.cal.service;
 
@@ -8,10 +11,6 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * @author Brijesh Sharma
- *
- */
 public class Logger {
 	
 	private boolean writeToFile = false;

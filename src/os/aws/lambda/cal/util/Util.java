@@ -1,5 +1,8 @@
 /**
- * 
+ * @author Brijesh Sharma
+ * Copyright (c) <year>, <copyright holder> 
+ * All rights reserved.
+ * This source code is licensed under the MIT license found in the LICENSE file in the root directory of this source tree. 
  */
 package os.aws.lambda.cal.util;
 
@@ -30,10 +33,6 @@ import com.amazonaws.services.cloudwatch.model.MetricDataResult;
 
 import os.aws.lambda.cal.service.Logger;
 
-/**
- * @author Brijesh Sharma
- *
- */
 public class Util {
 	
 	private static Logger logger = Logger.getLogger();
