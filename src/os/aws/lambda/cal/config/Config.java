@@ -1,9 +1,10 @@
 /**
  * @author Brijesh Sharma
- * Copyright (c) <year>, <copyright holder> 
+ * Copyright (c) 2020, Brijesh Sharma 
  * All rights reserved.
  * This source code is licensed under the MIT license found in the LICENSE file in the root directory of this source tree. 
  */
+
 package os.aws.lambda.cal.config;
 
 import java.io.FileReader;
@@ -26,10 +27,6 @@ import os.aws.lambda.cal.modal.JsonPayload;
 import os.aws.lambda.cal.service.Logger;
 import os.aws.lambda.cal.util.Util;
 
-/**
- * @author Brijesh Sharma
- *
- */
 public class Config implements ConfigConstants {
 	
 	private Logger logger = Logger.getLogger();
