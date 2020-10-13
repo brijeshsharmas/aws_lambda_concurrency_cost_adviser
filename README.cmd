@@ -29,5 +29,5 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 Please make sure to update tests as appropriate.
 
-## License
+## MIT License
 (https://github.com/brijeshsharmas/aws_lambda_concurrency_cost_adviser/blob/master/LICENSE)
