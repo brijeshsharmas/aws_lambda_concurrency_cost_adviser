@@ -153,6 +153,9 @@ public class Config implements ConfigConstants {
 			return JsonPayload.buildJsonPayload(jsonRoot);
 		} catch(IOException e) { logger.print("Error Loading Json File [" + path + "]. Error [" + e.getMessage() + "]"); 			
 		} catch(ParseException e) { logger.print("Error Parsing Json File [" + path + "]. Error [" + e.getMessage() + "]");
+			e.printStackTrace();
+		} catch(ClassCastException e) { logger.print("Error Parsing Json File [" + path + "]. Error [" + e.getMessage() + "]");
+			e.printStackTrace();
 		} finally {close(reader);}
 		return null;
 	}

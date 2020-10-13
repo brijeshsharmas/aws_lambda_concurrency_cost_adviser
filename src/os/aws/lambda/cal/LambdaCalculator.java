@@ -598,7 +598,7 @@ public class LambdaCalculator {
 		msg += "\n\t{";
 		msg += "\n\t\t\"Body\": {\"Key1\":\"Value1\", \"Key2\":\"Value2\"},";
 		msg += "\n\t\t\"" + KEY_WEIGHT + "\":1";
-		msg += "\n\t}";
+		msg += "\n\t},";
 		msg += "\n\t{";
 		msg += "\n\t\t\"Body\": {\"Key3\":\"Value3\", \"Key4\":\"Value4\"},";
 		msg += "\n\t\t\"" + KEY_WEIGHT + "\":2";
